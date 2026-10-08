@@ -1,0 +1,101 @@
+body{margin:0;background:oklch(0.16 0.014 250);font-family:'Inter',system-ui,sans-serif;}
+  a{color:oklch(0.72 0.12 210);text-decoration:none;}
+  a:hover{color:oklch(0.8 0.12 210);}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--input-border-strong);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  input[type=text],input[type=password],input[type=number],select{font-family:'Inter',system-ui,sans-serif;}
+
+/* Fluid dialog layout (Track A polish 2026.10.08) */
+.mn-dialog-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.mn-dialog-shell .mn-dialog-title {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: move;
+}
+.mn-dialog-shell .mn-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.mn-dialog-shell .mn-dialog-footer {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: auto;
+}
+.mn-dialog-shell input[type="text"],
+.mn-dialog-shell input[type="password"],
+.mn-dialog-shell input[type="number"],
+.mn-dialog-shell select,
+.mn-dialog-shell textarea {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.mn-dialog-shell label {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Preferences tabs wrap; dialog content never permanently clipped */
+.mn-dialog-shell .mn-prefs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.mn-dialog-shell {
+  /* explicit height comes from inline style; do NOT set height:auto
+     or flex:1 children with min-height:0 collapse to empty */
+  box-sizing: border-box;
+}
+
+/* 2026.10.08 empty-dialog fix */
+.mn-dialog-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  min-width: 360px !important;
+  min-height: 240px !important;
+  max-width: 92vw !important;
+  max-height: 88vh !important;
+  background: var(--dialog-bg) !important;
+  color: var(--text) !important;
+}
+.mn-dialog-shell .mn-dialog-title {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.mn-dialog-shell .mn-dialog-body {
+  flex: 1 1 auto !important;
+  min-height: 120px !important;
+  overflow: auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.mn-dialog-shell .mn-dialog-footer {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: auto;
+}
+.mn-dialog-shell input[type="text"],
+.mn-dialog-shell input[type="password"],
+.mn-dialog-shell input[type="number"],
+.mn-dialog-shell select,
+.mn-dialog-shell textarea {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}

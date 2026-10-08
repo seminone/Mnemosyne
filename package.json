@@ -1,0 +1,27 @@
+{
+  "name": "mnemosyne",
+  "productName": "Mnemosyne",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mnemosyne — TheBrain 7 Professional functional GUI shell (Electron + JS renderer). Phase 1.",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "npm run build && electron .",
+    "dev:hot": "node scripts/dev-hot.js",
+    "dev:renderer": "vite",
+    "build": "vite build",
+    "start": "electron .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^33.2.1",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  }
+}
