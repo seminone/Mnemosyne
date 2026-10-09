@@ -87,7 +87,7 @@ export default function renderTemplate(v) {
             {"46.6 MB Used / 59.1 MB Free"}
           </div>
         </div>
-        <div ref={v.plexRef} onMouseDown={v.onPlexMouseDown} onMouseMove={v.onPlexMouseMove} onMouseUp={v.onPlexMouseUp} onMouseLeave={v.onPlexMouseUp} style={{flex: "1", position: "relative", background: "radial-gradient(circle at 50% 42%, var(--canvas-top) 0%, var(--canvas-bottom) 75%)", minHeight: "0", overflow: "hidden", cursor: v.plexCursor || "grab"}}>
+        <div ref={v.plexRef} onMouseDown={v.onPlexMouseDown} onMouseMove={v.onPlexMouseMove} onMouseUp={v.onPlexMouseUp} onMouseLeave={v.onPlexMouseUp} onWheel={v.onPlexWheel} style={{flex: "1", position: "relative", background: "radial-gradient(circle at 50% 42%, var(--canvas-top) 0%, var(--canvas-bottom) 75%)", minHeight: "0", overflow: "hidden", cursor: v.plexCursor || "grab"}}>
           <div style={{position: "absolute", top: "12px", right: "14px", width: "26px", height: "26px", borderRadius: "6px", background: "var(--chip-bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer"}}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.3">
               <path d="M8 3H5a2 2 0 0 0-2 2v3" />
@@ -96,6 +96,10 @@ export default function renderTemplate(v) {
               <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
             </svg>
           </div>
+          <div style={{position: "absolute", top: "12px", right: "48px", height: "26px", padding: "0 10px", borderRadius: "6px", background: "var(--chip-bg)", display: "flex", alignItems: "center", fontSize: "11px", color: "var(--text-muted)", fontFamily: "'JetBrains Mono',monospace", zIndex: 6, pointerEvents: "none"}}>
+            {v.zoomLabel || "100%"}
+          </div>
+          <div className="mn-camera-layer" style={css(v.cameraLayerStyle || "position:absolute;inset:0;")}> 
           <svg width="180" height="180" viewBox="0 0 180 180" style={css(v.radialStyle || "position:absolute;left:50%;top:50%;transform:translate(-50%,-118px);opacity:0.35;")}>
             <circle cx="90" cy="90" r="70" fill="none" stroke="var(--accent-dim)" strokeWidth="1" />
             <circle cx="90" cy="90" r="45" fill="none" stroke="var(--accent-dim)" strokeWidth="1" />
@@ -180,32 +184,53 @@ export default function renderTemplate(v) {
               </div>
             </>
           ) : null}
-          <div style={{position: "absolute", bottom: "14px", left: "14px", display: "flex", gap: "8px", alignItems: "center", zIndex: 5}} onClick={v.stopProp} onMouseDown={v.stopProp}>
-            <input
-              type="text"
-              value={v.plexSearch || ""}
-              onChange={v.setPlexSearch}
-              onKeyDown={v.onPlexSearchKey}
-              placeholder="Search thoughts…"
-              style={{width: "230px", height: "26px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none"}}
-            />
-            <div onClick={v.runPlexSearch} style={{height: "26px", padding: "0 14px", borderRadius: "5px", background: "var(--chip-bg)", border: "1px solid var(--input-border-strong)", display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-tertiary)", cursor: "pointer"}}>
-              {"Search"}
-            </div>
-          </div>
-          <div style={{position: "absolute", bottom: "14px", right: "14px", display: "flex", alignItems: "center", gap: "6px", padding: "5px 10px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)"}}>
-            <div style={{width: "8px", height: "8px", borderRadius: "2px", background: "var(--accent)"}} />
-            <div style={{fontSize: "12px", fontWeight: "600"}}>
-              {v.activeThought?.title}
-            </div>
-          </div>
         </div>
         
-          {v.contextMenu ? (
-            <div onClick={v.stopProp} onMouseDown={v.stopProp} style={{position: "absolute", left: (v.contextMenu.x) + "px", top: (v.contextMenu.y) + "px", zIndex: 40, minWidth: "160px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", boxShadow: "0 12px 30px rgba(0,0,0,0.5)", padding: "6px"}}>
-              <div onClick={v.contextActivate} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text)"}}>Activate</div>
-              <div onClick={v.contextRename} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text)"}}>Edit / Rename…</div>
-              <div onClick={v.closeContextMenu} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text-muted)"}}>Close menu</div>
+                    </div>{/* mn-camera-layer */}
+          {/* HUD: search + result chips — outside camera layer (no pan/zoom) */}
+          <div
+            className="mn-search-hud"
+            style={{position: "absolute", bottom: "14px", left: "14px", right: "14px", display: "flex", gap: "8px", alignItems: "center", zIndex: 20, pointerEvents: "none"}}
+          >
+            <div style={{display: "flex", gap: "8px", alignItems: "center", flex: "none", pointerEvents: "auto"}} onClick={v.stopProp} onMouseDown={v.stopProp}>
+              <input
+                type="text"
+                value={v.plexSearch || ""}
+                onChange={v.setPlexSearch}
+                onKeyDown={v.onPlexSearchKey}
+                placeholder="Search thoughts…"
+                style={{width: "230px", height: "26px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none", flex: "none"}}
+              />
+              <div onClick={v.runPlexSearch} style={{height: "26px", padding: "0 14px", borderRadius: "5px", background: "var(--chip-bg)", border: "1px solid var(--input-border-strong)", display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-tertiary)", cursor: "pointer", flex: "none", whiteSpace: "nowrap"}}>
+                {"Search"}
+              </div>
+            </div>
+            <div style={{display: "flex", gap: "6px", alignItems: "center", flex: "1", minWidth: 0, overflowX: "auto", overflowY: "hidden", pointerEvents: "auto", paddingBottom: "2px"}} onClick={v.stopProp} onMouseDown={v.stopProp}>
+              {(v.searchHits || []).map((hit, $index) => (
+                <div
+                  key={hit?.id ?? $index}
+                  onClick={() => v.onSearchHitClick?.(hit.id)}
+                  title={hit?.title}
+                  style={{height: "26px", padding: "0 10px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", flex: "none", maxWidth: "200px"}}
+                >
+                  <div style={{width: "8px", height: "8px", borderRadius: "2px", background: "var(--accent)", flex: "none"}} />
+                  <div style={{fontSize: "12px", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                    {hit?.title}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+{v.contextMenu ? (
+            <div className="mn-context-menu" onClick={v.stopProp} onMouseDown={v.stopProp} style={{position: "absolute", left: (v.contextMenu.x) + "px", top: (v.contextMenu.y) + "px", zIndex: 40, minWidth: "180px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", boxShadow: "0 12px 30px rgba(0,0,0,0.5)", padding: "6px"}}>
+              <div style={{padding: "6px 14px 8px", fontSize: "11px", color: "var(--text-muted)", borderBottom: "1px solid var(--divider)", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}} title={v.contextMenu.title || v.contextTargetTitle || ""}>
+                {v.contextMenu.title || v.contextTargetTitle || "Thought"}
+              </div>
+              <div onClick={v.contextActivate} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text)"}}>{"Activate (make focal)"}</div>
+              <div onClick={v.contextRename} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text)"}}>{"Edit / Rename…"}</div>
+              <div style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12px", color: "var(--text-disabled)", cursor: "default"}} title="Coming later">{"Color / Tags… (soon)"}</div>
+              <div onClick={v.closeContextMenu} style={{padding: "6px 14px", borderRadius: "5px", fontSize: "12.5px", cursor: "pointer", color: "var(--text-muted)"}}>{"Close menu"}</div>
             </div>
           ) : null}
         
@@ -1454,7 +1479,7 @@ export default function renderTemplate(v) {
                   <>
                     <div className="mn-dialog-body" style={{width: "100%", maxWidth: "100%", boxSizing: "border-box", flex: "1 1 auto", minHeight: "120px", display: "flex", flexDirection: "column", overflow: "auto"}}>
                       <div onMouseDown={v.startMainDialogDrag} className="mn-dialog-title" style={{display: "flex", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--divider-strong)", fontSize: "13px", fontWeight: "600", position: "relative", cursor: "move", flex: "none", width: "100%", boxSizing: "border-box"}}>
-                        {"Rename / Edit Thought"}
+                        {(v.renameTargetTitle ? ("Rename / Edit — " + v.renameTargetTitle) : "Rename / Edit Thought")}
                         <div onClick={v.closeDialog} style={{position: "absolute", top: "8px", right: "10px", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", cursor: "pointer", color: "var(--text-muted)"}}>{"✕"}</div>
                       </div>
                       <div className="mn-dialog-body" style={{padding: "16px 14px", flex: "1 1 auto", minHeight: "80px", overflow: "auto", width: "100%", boxSizing: "border-box"}}>

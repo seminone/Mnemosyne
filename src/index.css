@@ -99,3 +99,9 @@ body{margin:0;background:oklch(0.16 0.014 250);font-family:'Inter',system-ui,san
   max-width: 100% !important;
   box-sizing: border-box !important;
 }
+
+/* Search HUD — fixed to plex viewport, not camera */
+.mn-search-hud {
+  z-index: 20;
+}
+.mn-search-hud::-webkit-scrollbar { height: 6px; }

@@ -6,14 +6,23 @@ export default class Cortex extends React.Component {
   state = {
     openMenu: null, openSubmenu: null, dialog: null,
     thoughtTab: 'thought', selectedId: 'main', scale: 1, bottomHeight: 246, thoughtWidth: 420,
-    panX: 0, panY: 0, panning: false, panOrigin: null,
+    // fitScale = window fit of 1600x1000 chrome; camera = user pan/zoom on Plex content
+    panning: false, panOrigin: null,
+    camera: {
+      panX: 0,
+      panY: 0,
+      zoom: 1,           // 0.25 .. 2.5
+      history: [],       // stub for Manage Saved Views / macros later: { id, name, panX, panY, zoom, at }
+    },
     forms: {}, toast: null, notesDraft: '',
     dragging: false, dragFrom: { x: 0, y: 0 }, dragTo: { x: 0, y: 0 }, showCreateChild: false, createChildPos: { x: 0, y: 0 }, newChildName: '', linkPaths: '',
     nodeOffsets: {},
     nodeDrag: null,
     contextMenu: null,
     renameDraft: '',
+    renameTargetId: null, // thought id for rename without activating
     plexSearch: '',
+    searchHits: [], // HUD chips: { id, title }[] — not affected by camera
     panelSearch: '',
     notesPanel: { visible: true, mode: 'docked', x: 80, y: 120, w: 520, h: 280 },
     thoughtPanel: { visible: true, mode: 'docked', x: 640, y: 120, w: 420, h: 320 },
@@ -55,11 +64,24 @@ export default class Cortex extends React.Component {
   measureParentLink() {
     const plex = this.plexRef.current, a = this.activeLeftDotRef.current, b = this.childDotRef.current;
     if (!plex) return;
-    const scale = this.state.scale || 1;
+    // Link SVG lives INSIDE .mn-camera-layer (pan+zoom). Measure dots in screen space,
+    // convert to plex layout px, then invert camera so path coords are pre-transform.
+    const cam = this.getCamera();
+    const zoom = cam.zoom || 1;
+    const panX = cam.panX || 0;
+    const panY = cam.panY || 0;
     const plexRect = plex.getBoundingClientRect();
+    const sx = plexRect.width / Math.max(1, plex.clientWidth);
+    const sy = plexRect.height / Math.max(1, plex.clientHeight);
     const center = (el) => {
+      if (!el) return { x: 0, y: 0 };
       const r = el.getBoundingClientRect();
-      return { x: (r.left + r.width / 2 - plexRect.left) / scale, y: (r.top + r.height / 2 - plexRect.top) / scale };
+      const layoutX = (r.left + r.width / 2 - plexRect.left) / sx;
+      const layoutY = (r.top + r.height / 2 - plexRect.top) / sy;
+      return {
+        x: (layoutX - panX) / zoom,
+        y: (layoutY - panY) / zoom,
+      };
     };
     const activeThought = this.thoughtsData[this.state.selectedId] || this.thoughtsData.main;
     const paths = [];
@@ -81,7 +103,7 @@ export default class Cortex extends React.Component {
     if (joined !== this.state.linkPaths) this.setState({ linkPaths: joined });
   }
   componentDidUpdate(prevProps, prevState) {
-    this.measureParentLink();
+    this.measureParentLink(); // links depend on camera + layout
     if (this.state.dialog && (
       prevState.dialog !== this.state.dialog ||
       (prevState.forms && this.state.forms && (prevState.forms.preferences || {}).tab !== (this.state.forms.preferences || {}).tab)
@@ -140,29 +162,111 @@ export default class Cortex extends React.Component {
   cancelCreateChild() { this.setState({ showCreateChild: false, newChildName: '', dragParentId: null }); }
 
 
+
+  CAMERA_ZOOM_MIN = 0.25;
+  CAMERA_ZOOM_MAX = 2.5;
+
+  getCamera() {
+    return this.state.camera || { panX: 0, panY: 0, zoom: 1, history: [] };
+  }
+  setCamera( partial, pushHistory = false ) {
+    this.setState((prev) => {
+      const cam = { ...(prev.camera || { panX: 0, panY: 0, zoom: 1, history: [] }), ...partial };
+      cam.zoom = Math.min(this.CAMERA_ZOOM_MAX, Math.max(this.CAMERA_ZOOM_MIN, cam.zoom));
+      let history = cam.history || [];
+      if (pushHistory) {
+        const entry = {
+          id: 'view_' + Date.now(),
+          name: null, // named later via Manage Saved Views…
+          panX: cam.panX,
+          panY: cam.panY,
+          zoom: cam.zoom,
+          at: new Date().toISOString(),
+          selectedId: prev.selectedId,
+        };
+        history = [...history, entry].slice(-100); // scalable cap
+        cam.history = history;
+      }
+      return { camera: cam };
+    });
+  }
+  resetCameraView(pushHistory = true) {
+    this.setCamera({ panX: 0, panY: 0, zoom: 1 }, pushHistory);
+    this.showToast('View reset: active node centered.');
+  }
+  pushCameraHistorySnapshot() {
+    const cam = this.getCamera();
+    this.setCamera({ panX: cam.panX, panY: cam.panY, zoom: cam.zoom }, true);
+  }
+  onPlexWheel(e) {
+    // prevent page scroll
+    e.preventDefault();
+    e.stopPropagation();
+    const plex = this.plexRef.current;
+    if (!plex) return;
+    const cam = this.getCamera();
+    const rect = plex.getBoundingClientRect();
+    // Convert screen px → plex layout px (parent chrome may be CSS-scaled)
+    const sx = rect.width / Math.max(1, plex.clientWidth);
+    const sy = rect.height / Math.max(1, plex.clientHeight);
+    const mx = (e.clientX - rect.left) / sx;
+    const my = (e.clientY - rect.top) / sy;
+    const direction = e.deltaY < 0 ? 1 : -1;
+    const factor = direction > 0 ? 1.1 : 1 / 1.1;
+    const oldZ = cam.zoom || 1;
+    const newZ = Math.min(this.CAMERA_ZOOM_MAX, Math.max(this.CAMERA_ZOOM_MIN, oldZ * factor));
+    if (Math.abs(newZ - oldZ) < 1e-6) return;
+
+    let panX = cam.panX || 0;
+    let panY = cam.panY || 0;
+    if (e.shiftKey) {
+      // zoom toward viewport center
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const wx = (cx - panX) / oldZ;
+      const wy = (cy - panY) / oldZ;
+      panX = cx - wx * newZ;
+      panY = cy - wy * newZ;
+    } else {
+      // zoom toward mouse cursor
+      const wx = (mx - panX) / oldZ;
+      const wy = (my - panY) / oldZ;
+      panX = mx - wx * newZ;
+      panY = my - wy * newZ;
+    }
+    this.setCamera({ panX, panY, zoom: newZ }, false);
+  }
+
   onPlexMouseDown(e) {
-    if (e.button !== 0 && e.button !== 1) return;
-    // Ignore when starting on interactive node chrome (dots / thought chips)
+    if (e.button !== 0) return; // left-drag empty canvas only
     const t = e.target;
-    if (t && t.closest && t.closest('[data-plex-node], input, textarea, button')) return;
+    if (t && t.closest && t.closest('[data-plex-node], input, textarea, button, .mn-context-menu')) return;
     if (this.state.dragging || this.state.showCreateChild) return;
     e.preventDefault();
+    const cam = this.getCamera();
     this.setState({
       panning: true,
-      panOrigin: { x: e.clientX, y: e.clientY, panX: this.state.panX, panY: this.state.panY },
+      panOrigin: { x: e.clientX, y: e.clientY, panX: cam.panX || 0, panY: cam.panY || 0 },
     });
   }
   onPlexMouseMove(e) {
     if (!this.state.panning || !this.state.panOrigin) return;
-    const scale = this.state.scale || 1;
+    // Parent chrome `scale` is fit-to-window; mouse deltas are in screen px → divide by fit scale
+    const plex = this.plexRef.current;
+    const rect = plex ? plex.getBoundingClientRect() : null;
+    const sx = rect ? rect.width / Math.max(1, plex.clientWidth) : (this.state.scale || 1);
+    const sy = rect ? rect.height / Math.max(1, plex.clientHeight) : (this.state.scale || 1);
     const ox = this.state.panOrigin;
-    this.setState({
-      panX: ox.panX + (e.clientX - ox.x) / scale,
-      panY: ox.panY + (e.clientY - ox.y) / scale,
-    });
+    const panX = ox.panX + (e.clientX - ox.x) / sx;
+    const panY = ox.panY + (e.clientY - ox.y) / sy;
+    this.setCamera({ panX, panY }, false);
   }
   onPlexMouseUp() {
-    if (this.state.panning) this.setState({ panning: false, panOrigin: null });
+    if (this.state.panning) {
+      this.setState({ panning: false, panOrigin: null });
+      // snapshot for future Manage Saved Views / reopen (unnamed history stub)
+      this.pushCameraHistorySnapshot();
+    }
   }
   selectThought(id) {
     const th = dataApi.getThought(id) || this.thoughtsData[id];
@@ -179,6 +283,22 @@ export default class Cortex extends React.Component {
   handleWindowClose() { window.mnemosyne?.window?.close?.(); }
 
   onGlobalKeyDown = (e) => {
+    // View camera shortcuts
+    if (e.ctrlKey && !e.altKey && (e.key === '0' || e.code === 'Digit0')) {
+      e.preventDefault();
+      this.resetCameraView(true);
+      return;
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === '=' || e.key === '+' || e.code === 'Equal')) {
+      e.preventDefault();
+      this.zoomBy(1.1);
+      return;
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === '-' || e.code === 'Minus')) {
+      e.preventDefault();
+      this.zoomBy(1/1.1);
+      return;
+    }
     if (e.key === 'Escape' || e.key === 'Esc') {
       if (this.state.dialog) {
         e.preventDefault();
@@ -239,8 +359,8 @@ export default class Cortex extends React.Component {
   }
   onNodeDoubleClick(e, id) {
     e.stopPropagation(); e.preventDefault();
-    this.selectThought(id);
-    this.openRenameDialog(id);
+    // Rename in place without centering (same reason as context menu).
+    this.openRenameDialog(id, { activate: false });
   }
   onNodeContextMenu(e, id) {
     e.preventDefault(); e.stopPropagation();
@@ -250,27 +370,38 @@ export default class Cortex extends React.Component {
     const r = plex.getBoundingClientRect();
     const x = (e.clientX - r.left) / scale;
     const y = (e.clientY - r.top) / scale;
-    this.selectThought(id);
-    this.setState({ contextMenu: { x, y, thoughtId: id }, openMenu: null, openSubmenu: null });
-  }
-  closeContextMenu() { this.setState({ contextMenu: null }); }
-  openRenameDialog(id) {
+    // Right-click must NOT activate/center the node — only open a menu on the target.
     const th = dataApi.getThought(id) || this.thoughtsData[id];
     this.setState({
-      dialog: 'renameThought',
-      renameDraft: (th && th.title) || '',
-      selectedId: id || this.state.selectedId,
-      contextMenu: null,
+      contextMenu: { x, y, thoughtId: id, title: (th && th.title) || id },
       openMenu: null,
       openSubmenu: null,
     });
   }
+  closeContextMenu() { this.setState({ contextMenu: null }); }
+  openRenameDialog(id, opts = {}) {
+    const targetId = id || this.state.selectedId;
+    const th = dataApi.getThought(targetId) || this.thoughtsData[targetId];
+    const activate = !!(opts && opts.activate);
+    const next = {
+      dialog: 'renameThought',
+      renameDraft: (th && th.title) || '',
+      renameTargetId: targetId,
+      contextMenu: null,
+      openMenu: null,
+      openSubmenu: null,
+    };
+    // Only recenter/activate when explicitly requested (e.g. Thought menu on active node).
+    if (activate && targetId) next.selectedId = targetId;
+    if (activate && th) next.notesDraft = th.notes || '';
+    this.setState(next);
+  }
   confirmRenameThought() {
-    const id = this.state.selectedId;
+    const id = this.state.renameTargetId || this.state.selectedId;
     const title = (this.state.renameDraft || '').trim();
     if (title && dataApi.renameThought(id, title)) {
       this.thoughtsData = dataApi.getAllThoughts();
-      this.setState({ dialog: null, renameDraft: '' });
+      this.setState({ dialog: null, renameDraft: '', renameTargetId: null });
       this.showToast('Thought renamed.');
       return;
     }
@@ -280,16 +411,26 @@ export default class Cortex extends React.Component {
   setPanelSearch(e) { this.setState({ panelSearch: e.target.value }); }
   runPlexSearch() {
     const q = (this.state.plexSearch || '').trim().toLowerCase();
-    if (!q) { this.showToast('Enter a search term.'); return; }
+    if (!q) {
+      this.setState({ searchHits: [] });
+      this.showToast('Enter a search term.');
+      return;
+    }
     const hits = Object.entries(this.thoughtsData)
       .filter(([, n]) => (n.title || '').toLowerCase().includes(q))
-      .map(([id, n]) => ({ id, title: n.title }));
+      .map(([id, n]) => ({ id, title: n.title }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+    // Do not auto-activate: chips are HUD results; user clicks a chip to focus.
+    this.setState({ searchHits: hits });
     if (hits.length) {
-      this.selectThought(hits[0].id);
-      this.showToast('Found ' + hits.length + ': ' + hits.map(h => h.title).join(', '));
+      this.showToast('Found ' + hits.length + ' match' + (hits.length === 1 ? '' : 'es') + '.');
     } else {
       this.showToast('No thoughts match "' + q + '".');
     }
+  }
+  onSearchHitClick(id) {
+    // Explicit activation from HUD chip only
+    this.selectThought(id);
   }
   openNotesWindow() {
     this.setState(prev => ({
@@ -412,6 +553,12 @@ export default class Cortex extends React.Component {
     this.updateScale();
     window.addEventListener('resize', this.updateScale);
     window.addEventListener('keydown', this.onGlobalKeyDown);
+    this._plexWheelNative = (ev) => this.onPlexWheel(ev);
+    // attach after first paint
+    setTimeout(() => {
+      const plex = this.plexRef.current;
+      if (plex) plex.addEventListener('wheel', this._plexWheelNative, { passive: false });
+    }, 0);
     const main = dataApi.getThought('main');
     if (main) this.setState({ notesDraft: main.notes || '' });
     setTimeout(() => this.measureParentLink(), 0);
@@ -419,6 +566,8 @@ export default class Cortex extends React.Component {
   componentWillUnmount() {
     window.removeEventListener('resize', this.updateScale);
     window.removeEventListener('keydown', this.onGlobalKeyDown);
+    const plex = this.plexRef.current;
+    if (plex && this._plexWheelNative) plex.removeEventListener('wheel', this._plexWheelNative);
   }
 
   startResizeV(e) {
@@ -510,7 +659,12 @@ export default class Cortex extends React.Component {
     view: { label: 'View', items: [
       { label: 'Normal', shortcut: 'Ctrl+Shift+1' }, { label: 'Outline', shortcut: 'Ctrl+Shift+2' }, { label: 'Last Expanded', shortcut: 'Ctrl+Shift+3' },
       { divider: true },
-      { label: 'Expand All', shortcut: 'Ctrl+=' }, { label: 'Collapse All', shortcut: 'Ctrl+-' }, { label: 'Manage Saved Views…' },
+      { label: 'Expand All', shortcut: 'Ctrl+=' }, { label: 'Collapse All', shortcut: 'Ctrl+-' },
+      { divider: true },
+      { label: 'Reset View', shortcut: 'Ctrl+0' },
+      { label: 'Zoom In', shortcut: 'Ctrl+Shift+=' },
+      { label: 'Zoom Out', shortcut: 'Ctrl+Shift+-' },
+      { label: 'Manage Saved Views…' },
     ]},
     options: { label: 'Options', items: [
       { label: 'Arrange Thoughts by', submenu: 'arrangeBy' }, { label: 'Thought Types Window', dialog: 'thoughtTypesWindow' }, { label: 'Wander', toggle: 'wander' },
@@ -756,7 +910,7 @@ export default class Cortex extends React.Component {
       const list = (ids || []).map(id => ({ id, node: this.thoughtsData[id] })).filter(x => x.node).sort((a, b) => a.node.title.localeCompare(b.node.title));
       const n = list.length, midOffset = -(n - 1) / 2 * rowGap;
       const rowW = 260, colW = list.length ? (n * rowW) : 0, startX = -colW / 2 + rowW / 2;
-      const panX = s.panX || 0, panY = s.panY || 0;
+      const panX = 0, panY = 0; // pan/zoom applied by camera layer, not per-node
       return list.map((x, i) => {
         const off = this.getNodeOffset(x.id);
         const lx = startX + i * rowW + panX + off.x;
@@ -821,9 +975,13 @@ export default class Cortex extends React.Component {
             this.setState({ openMenu: null, openSubmenu: null });
             return;
           }
+          if (it.label === 'Reset View') { this.resetCameraView(true); this.setState({ openMenu: null, openSubmenu: null }); return; }
+          if (it.label === 'Zoom In') { this.zoomBy(1.1, false); this.setState({ openMenu: null, openSubmenu: null }); return; }
+          if (it.label === 'Zoom Out') { this.zoomBy(1/1.1, false); this.setState({ openMenu: null, openSubmenu: null }); return; }
+          if (it.label === 'Manage Saved Views…') { this.showToast('Manage Saved Views — coming later (camera.history ready).'); this.setState({ openMenu: null, openSubmenu: null }); return; }
           if (it.label === 'Open Notes Window') { this.openNotesWindow(); return; }
           if (it.label === 'Open Thought Window') { this.openThoughtWindow(); return; }
-          if (it.label === 'Rename/Edit') { this.openRenameDialog(this.state.selectedId); return; }
+          if (it.label === 'Rename/Edit') { this.openRenameDialog(this.state.selectedId, { activate: false }); return; }
           // Phase 1: every remaining item must give visible feedback
           this.stubAction(it.label || 'command');
         },
@@ -930,19 +1088,34 @@ export default class Cortex extends React.Component {
       onPlexMouseDown: (e) => this.onPlexMouseDown(e),
       onPlexMouseMove: (e) => this.onPlexMouseMove(e),
       onPlexMouseUp: () => this.onPlexMouseUp(),
-      panX: s.panX || 0, panY: s.panY || 0,
-      plexCursor: s.panning ? 'grabbing' : 'grab',
-      activeNodeStyle: (() => { const o = this.getNodeOffset(s.selectedId); return `position:absolute;left:calc(50% + ${(s.panX||0)+o.x}px);top:calc(50% + ${(s.panY||0)+o.y}px);transform:translate(-50%,-50%);cursor:${s.nodeDrag&&s.nodeDrag.id===s.selectedId?'grabbing':'grab'};`; })(),
-      radialStyle: `position:absolute;left:calc(50% + ${s.panX || 0}px);top:calc(50% + ${(s.panY || 0) - 118}px);transform:translate(-50%,0);opacity:0.35;`,
+      onPlexWheel: (e) => this.onPlexWheel(e),
+      camera: this.getCamera(),
+      cameraLayerStyle: (() => {
+        const cam = s.camera || { panX: 0, panY: 0, zoom: 1 };
+        const z = cam.zoom || 1;
+        const x = cam.panX || 0;
+        const y = cam.panY || 0;
+        // origin top-left of plex; pan in plex pixels; zoom about 0,0 with pan compensating
+        return 'position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0;transform:translate(' + x + 'px,' + y + 'px) scale(' + z + ');will-change:transform;';
+      })(),
+      zoomLabel: Math.round(((s.camera && s.camera.zoom) || 1) * 100) + '%',
+      plexCursor: s.panning ? 'grabbing' : 'default',
+      activeNodeStyle: (() => { const o = this.getNodeOffset(s.selectedId); return `position:absolute;left:calc(50% + ${o.x}px);top:calc(50% + ${o.y}px);transform:translate(-50%,-50%);cursor:${s.nodeDrag&&s.nodeDrag.id===s.selectedId?'grabbing':'grab'};`; })(),
+      radialStyle: `position:absolute;left:50%;top:calc(50% - 118px);transform:translate(-50%,0);opacity:0.35;`,
       onActiveNodeMouseDown: (e) => this.startNodeDrag(e, s.selectedId),
       onActiveNodeClick: (e) => this.onNodeClick(e, s.selectedId),
       onActiveNodeDoubleClick: (e) => this.onNodeDoubleClick(e, s.selectedId),
       onActiveNodeContextMenu: (e) => this.onNodeContextMenu(e, s.selectedId),
       contextMenu: s.contextMenu,
       closeContextMenu: () => this.closeContextMenu(),
-      contextRename: () => this.openRenameDialog(s.contextMenu && s.contextMenu.thoughtId),
+      contextRename: () => this.openRenameDialog(s.contextMenu && s.contextMenu.thoughtId, { activate: false }),
+      contextTargetTitle: (s.contextMenu && s.contextMenu.title) || '',
+
       contextActivate: () => { if (s.contextMenu) this.selectThought(s.contextMenu.thoughtId); this.closeContextMenu(); },
       plexSearch: s.plexSearch, setPlexSearch: (e) => this.setPlexSearch(e),
+      searchHits: s.searchHits || [],
+      onSearchHitClick: (id) => this.onSearchHitClick(id),
+
       onPlexSearchKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); this.runPlexSearch(); } },
       runPlexSearch: () => this.runPlexSearch(),
       panelSearch: s.panelSearch, setPanelSearch: (e) => this.setPanelSearch(e),
@@ -995,6 +1168,9 @@ export default class Cortex extends React.Component {
       openGithub: () => window.mnemosyne?.openExternal?.(this.GITHUB_PROJECT_URL),
 
       renameDraft: s.renameDraft,
+      renameTargetId: s.renameTargetId,
+      renameTargetTitle: (s.renameTargetId && this.thoughtsData[s.renameTargetId] && this.thoughtsData[s.renameTargetId].title) || s.renameDraft || '',
+
       setRenameDraft: (e) => this.setState({ renameDraft: e.target.value }),
       confirmRenameThought: () => this.confirmRenameThought(),
       goHome: () => this.selectThought('main'),

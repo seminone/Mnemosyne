@@ -1,0 +1,12 @@
+from pathlib import Path
+c=Path(r"D:\Claude Design\TheBrain 7 (clone) (2026.08.11.)\GUI_to_Electron\src\Cortex.jsx").read_text(encoding="utf-8")
+print("openRename count", c.count("openRenameDialog(id"))
+print("confirm count", c.count("confirmRenameThought()"))
+i=c.find("  openRenameDialog")
+print(c[i:i+700])
+print("---")
+i=c.find("  confirmRenameThought")
+print(c[i:i+350])
+print("---")
+i=c.find("  onNodeContextMenu")
+print(c[i:i+450])
