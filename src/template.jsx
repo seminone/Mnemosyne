@@ -2,6 +2,48 @@ import React from 'react';
 import Hover from './Hover.jsx';
 import css from './css.js';
 
+/** Render one toolbox tool button (icon or label chip). */
+function renderToolboxTool(tool, v) {
+  if (tool?.kind === 'label') {
+    return (
+      <div
+        key={tool.id}
+        title={tool.title}
+        onClick={tool.onClick}
+        style={{
+          height: "22px",
+          minWidth: tool.id && String(tool.id).startsWith('mem') ? "88px" : "42px",
+          padding: "0 8px",
+          borderRadius: "4px",
+          background: "var(--input-bg)",
+          border: "1px solid var(--input-border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "10.5px",
+          color: "var(--text-muted)",
+          fontFamily: "'JetBrains Mono',monospace",
+          cursor: "pointer",
+          flex: "none",
+          userSelect: "none",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {tool.label || "—"}
+      </div>
+    );
+  }
+  return (
+    <div
+      key={tool.id}
+      title={tool.title}
+      onClick={tool.onClick}
+      dangerouslySetInnerHTML={v.icons?.[tool.iconKey]}
+      style={css(v.toolIconStyle)}
+    />
+  );
+}
+
 // Generated 1:1 from the "Cortex v2.dc.html" template. `v` = the object returned by Cortex.renderVals().
 export default function renderTemplate(v) {
   return (
@@ -71,34 +113,152 @@ export default function renderTemplate(v) {
             </>
           ) : null}
         </div>
-        <div style={{height: "34px", flex: "none", display: "flex", alignItems: "center", gap: "6px", padding: "0 10px", background: "var(--toolbar-bg)", borderBottom: "1px solid var(--border)"}}>
-          <div dangerouslySetInnerHTML={v.icons?.back} style={css(v.toolIconStyle)} />
-          <div dangerouslySetInnerHTML={v.icons?.fwd} style={css(v.toolIconStyle)} />
-          <div onClick={v.goHome} dangerouslySetInnerHTML={v.icons?.home} style={css(v.toolIconStyle)} />
-          <div style={{width: "1px", height: "16px", background: "var(--divider-strong)", margin: "0 4px"}} />
-          <div dangerouslySetInnerHTML={v.icons?.pin} style={css(v.toolIconStyle)} />
-          <div dangerouslySetInnerHTML={v.icons?.plus} style={css(v.toolIconStyle)} />
-          <div dangerouslySetInnerHTML={v.icons?.minus} style={css(v.toolIconStyle)} />
-          <div dangerouslySetInnerHTML={v.icons?.refresh} style={css(v.toolIconStyle)} />
-          <div style={{width: "1px", height: "16px", background: "var(--divider-strong)", margin: "0 4px"}} />
-          <div dangerouslySetInnerHTML={v.icons?.sync} style={css(v.toolIconStyle)} />
-          <div dangerouslySetInnerHTML={v.icons?.unsync} style={css(v.toolIconStyle)} />
-          <div style={{marginLeft: "auto", fontSize: "11px", color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace"}}>
-            {"46.6 MB Used / 59.1 MB Free"}
+        {/* Tools-bar host — Office-2003 style; invisible when empty / toggled off */}
+        {v.showDockedToolsBar ? (
+          <div
+            className="mn-tools-bar"
+            onMouseDown={v.stopProp}
+            style={{
+              height: "34px",
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "0 6px",
+              background: "var(--toolbar-bg)",
+              borderBottom: "1px solid var(--border)",
+              minWidth: 0,
+              overflow: "hidden",
+            }}
+          >
+            {/* Host-bar knurled grip (drag whole tools-bar to float) */}
+            <div
+              title="Drag tools-bar"
+              onMouseDown={v.toolsBar?.onGripMouseDown}
+              style={{
+                width: "10px",
+                height: "22px",
+                flex: "none",
+                cursor: "move",
+                borderRadius: "2px",
+                backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+                backgroundSize: "3px 3px",
+                backgroundPosition: "center",
+                opacity: 0.9,
+                marginRight: "2px",
+              }}
+            />
+            {(v.dockedToolboxes || []).map((tb) => (
+              <div
+                key={tb.id}
+                className="mn-toolbox"
+                title={tb.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px",
+                  height: "28px",
+                  padding: "0 4px 0 2px",
+                  borderRadius: "3px",
+                  border: "1px solid var(--divider)",
+                  background: "var(--chip-bg)",
+                  flex: "none",
+                }}
+              >
+                <div
+                  title={`Drag ${tb.label} toolbox`}
+                  onMouseDown={tb.onGripMouseDown}
+                  style={{
+                    width: "8px",
+                    height: "20px",
+                    flex: "none",
+                    cursor: "move",
+                    borderRadius: "2px",
+                    backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+                    backgroundSize: "3px 3px",
+                    backgroundPosition: "center",
+                  }}
+                />
+                {(tb.tools || []).map((tool) => renderToolboxTool(tool, v))}
+              </div>
+            ))}
+            {/* spacer keeps toolboxes left-aligned; memory gauges live in Memory toolbox */}
+            <div style={{flex: "1", minWidth: 0}} />
           </div>
-        </div>
+        ) : null}
+        {/* Favorites / pinned-thoughts bar — below tools-bar; pins, snippets, hyperlinks, Bezier-to-plex later */}
+        {v.showFavoritesBar !== false ? (
+          <div
+            className="mn-favorites-bar"
+            data-favorites-bar="1"
+            onClick={v.onFavoritesBarClick}
+            onContextMenu={v.onFavoritesBarContextMenu}
+            onMouseDown={v.stopProp}
+            style={{
+              height: "36px",
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "0 8px",
+              background: "var(--toolbar-bg)",
+              borderBottom: "1px solid var(--border)",
+              minWidth: 0,
+              overflowX: "auto",
+              overflowY: "hidden",
+            }}
+            title="Favorites / pinned thoughts bar"
+          >
+            <div
+              style={{
+                width: "8px",
+                height: "20px",
+                flex: "none",
+                borderRadius: "2px",
+                backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+                backgroundSize: "3px 3px",
+                backgroundPosition: "center",
+                opacity: 0.75,
+              }}
+              title="Favorites bar"
+            />
+            <span style={{fontSize: "10.5px", fontWeight: 600, color: "var(--text-muted)", flex: "none", userSelect: "none", letterSpacing: "0.02em"}}>
+              {"Favorites"}
+            </span>
+            <div style={{width: "1px", height: "16px", background: "var(--divider-strong)", flex: "none"}} />
+            {(v.favorites || []).length ? (v.favorites || []).map((pin, $index) => (
+              <div
+                key={pin?.id ?? $index}
+                data-favorite-id={pin?.id}
+                data-thought-id={pin?.thoughtId}
+                title={pin?.label || pin?.thoughtId || "Pinned thought"}
+                style={{
+                  height: "26px",
+                  padding: "0 10px",
+                  borderRadius: "5px",
+                  background: "var(--chip-bg)",
+                  border: "1px solid var(--input-border)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  flex: "none",
+                  cursor: "pointer",
+                  maxWidth: "180px",
+                }}
+              >
+                <div style={{width: "8px", height: "8px", borderRadius: "2px", background: "var(--accent)", flex: "none"}} />
+                <span style={{fontSize: "11.5px", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                  {pin?.label || pin?.thoughtId || "Pin"}
+                </span>
+              </div>
+            )) : (
+              <div style={{fontSize: "11px", color: "var(--text-faint)", fontStyle: "italic", userSelect: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                {v.favoritesPlaceholder || "Favorites / pinned thoughts — placeholder"}
+              </div>
+            )}
+          </div>
+        ) : null}
         <div ref={v.plexRef} onMouseDown={v.onPlexMouseDown} onMouseMove={v.onPlexMouseMove} onMouseUp={v.onPlexMouseUp} onMouseLeave={v.onPlexMouseUp} onWheel={v.onPlexWheel} style={{flex: "1", position: "relative", background: "radial-gradient(circle at 50% 42%, var(--canvas-top) 0%, var(--canvas-bottom) 75%)", minHeight: "0", overflow: "hidden", cursor: v.plexCursor || "grab"}}>
-          <div style={{position: "absolute", top: "12px", right: "14px", width: "26px", height: "26px", borderRadius: "6px", background: "var(--chip-bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer"}}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.3">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-              <path d="M16 3h3a2 2 0 0 1 2 2v3" />
-              <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
-              <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
-            </svg>
-          </div>
-          <div style={{position: "absolute", top: "12px", right: "48px", height: "26px", padding: "0 10px", borderRadius: "6px", background: "var(--chip-bg)", display: "flex", alignItems: "center", fontSize: "11px", color: "var(--text-muted)", fontFamily: "'JetBrains Mono',monospace", zIndex: 6, pointerEvents: "none"}}>
-            {v.zoomLabel || "100%"}
-          </div>
           <div className="mn-camera-layer" style={css(v.cameraLayerStyle || "position:absolute;inset:0;")}> 
           <svg width="180" height="180" viewBox="0 0 180 180" style={css(v.radialStyle || "position:absolute;left:50%;top:50%;transform:translate(-50%,-118px);opacity:0.35;")}>
             <circle cx="90" cy="90" r="70" fill="none" stroke="var(--accent-dim)" strokeWidth="1" />
@@ -187,40 +347,6 @@ export default function renderTemplate(v) {
         </div>
         
                     </div>{/* mn-camera-layer */}
-          {/* HUD: search + result chips — outside camera layer (no pan/zoom) */}
-          <div
-            className="mn-search-hud"
-            style={{position: "absolute", bottom: "14px", left: "14px", right: "14px", display: "flex", gap: "8px", alignItems: "center", zIndex: 20, pointerEvents: "none"}}
-          >
-            <div style={{display: "flex", gap: "8px", alignItems: "center", flex: "none", pointerEvents: "auto"}} onClick={v.stopProp} onMouseDown={v.stopProp}>
-              <input
-                type="text"
-                value={v.plexSearch || ""}
-                onChange={v.setPlexSearch}
-                onKeyDown={v.onPlexSearchKey}
-                placeholder="Search thoughts…"
-                style={{width: "230px", height: "26px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none", flex: "none"}}
-              />
-              <div onClick={v.runPlexSearch} style={{height: "26px", padding: "0 14px", borderRadius: "5px", background: "var(--chip-bg)", border: "1px solid var(--input-border-strong)", display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-tertiary)", cursor: "pointer", flex: "none", whiteSpace: "nowrap"}}>
-                {"Search"}
-              </div>
-            </div>
-            <div style={{display: "flex", gap: "6px", alignItems: "center", flex: "1", minWidth: 0, overflowX: "auto", overflowY: "hidden", pointerEvents: "auto", paddingBottom: "2px"}} onClick={v.stopProp} onMouseDown={v.stopProp}>
-              {(v.searchHits || []).map((hit, $index) => (
-                <div
-                  key={hit?.id ?? $index}
-                  onClick={() => v.onSearchHitClick?.(hit.id)}
-                  title={hit?.title}
-                  style={{height: "26px", padding: "0 10px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", flex: "none", maxWidth: "200px"}}
-                >
-                  <div style={{width: "8px", height: "8px", borderRadius: "2px", background: "var(--accent)", flex: "none"}} />
-                  <div style={{fontSize: "12px", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
-                    {hit?.title}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
 {v.contextMenu ? (
             <div className="mn-context-menu" onClick={v.stopProp} onMouseDown={v.stopProp} style={{position: "absolute", left: (v.contextMenu.x) + "px", top: (v.contextMenu.y) + "px", zIndex: 40, minWidth: "180px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", boxShadow: "0 12px 30px rgba(0,0,0,0.5)", padding: "6px"}}>
@@ -234,11 +360,47 @@ export default function renderTemplate(v) {
             </div>
           ) : null}
         
+        
+        {/* Search HUD row — always above docked Notes/Thought; not in camera layer */}
+        <div
+          className="mn-search-hud"
+          style={{flex: "none", height: "40px", display: "flex", gap: "8px", alignItems: "center", padding: "0 14px", borderTop: "1px solid var(--border)", background: "var(--bg)", zIndex: 15}}
+          onClick={v.stopProp}
+          onMouseDown={v.stopProp}
+        >
+          <input
+            type="text"
+            value={v.plexSearch || ""}
+            onChange={v.setPlexSearch}
+            onKeyDown={v.onPlexSearchKey}
+            placeholder="Search thoughts…"
+            style={{width: "230px", height: "26px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none", flex: "none"}}
+          />
+          <div onClick={v.runPlexSearch} style={{height: "26px", padding: "0 14px", borderRadius: "5px", background: "var(--chip-bg)", border: "1px solid var(--input-border-strong)", display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-tertiary)", cursor: "pointer", flex: "none", whiteSpace: "nowrap"}}>
+            {"Search"}
+          </div>
+          <div style={{display: "flex", gap: "6px", alignItems: "center", flex: "1", minWidth: 0, overflowX: "auto", overflowY: "hidden"}}>
+            {(v.searchHits || []).map((hit, $index) => (
+              <div
+                key={hit?.id ?? $index}
+                onClick={() => v.onSearchHitClick?.(hit.id)}
+                title={hit?.title}
+                style={{height: "26px", padding: "0 10px", borderRadius: "5px", background: "var(--titlebar-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", flex: "none", maxWidth: "200px"}}
+              >
+                <div style={{width: "8px", height: "8px", borderRadius: "2px", background: "var(--accent)", flex: "none"}} />
+                <div style={{fontSize: "12px", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                  {hit?.title}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div onMouseDown={v.startResizeV} style={{height: "5px", flex: "none", cursor: "row-resize", background: "var(--border)", position: "relative"}}>
           <div style={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: "36px", height: "3px", borderRadius: "2px", background: "var(--handle)"}} />
         </div>
-        <div style={{height: `${v.bottomHeight}px`, flex: "none", display: "flex", borderTop: "1px solid var(--border)", minHeight: "0"}}>
-          <div style={{flex: "1", display: v.showDockedNotes === false ? "none" : "flex", flexDirection: "column", background: "var(--panel-bg)", minWidth: "0"}}>
+        <div style={{height: `${v.bottomHeight}px`, flex: "none", display: "flex", borderTop: "1px solid var(--border)", minHeight: "0", minWidth: "0", width: "100%", boxSizing: "border-box", overflow: "hidden"}}>
+          <div style={css(v.dockedNotesStyle || (v.showDockedNotes === false ? "display:none" : "flex:1;display:flex;flex-direction:column;background:var(--panel-bg);min-width:0"))}>
             <div style={{height: "26px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", fontSize: "11.5px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--divider)"}}>
               {" Notes "}
               <div style={{marginLeft: "auto", display: "flex", gap: "10px", color: "var(--text-faint)", fontSize: "11px"}}>
@@ -299,32 +461,34 @@ export default function renderTemplate(v) {
               value={v.notesDraft ?? v.activeThought?.notes ?? ""}
               onChange={v.onNotesChange}
               placeholder="Notes / annotations…"
-              style={{flex: "1", padding: "12px 14px", fontSize: "12.5px", lineHeight: "1.6", color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflow: "auto", resize: "none", border: "none", outline: "none", background: "transparent", width: "100%", boxSizing: "border-box", fontFamily: "inherit"}}
+              style={{flex: "1", minHeight: "0", padding: "12px 14px", fontSize: "12.5px", lineHeight: "1.6", color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflow: "auto", resize: "none", border: "none", outline: "none", background: "transparent", width: "100%", maxWidth: "100%", boxSizing: "border-box", fontFamily: "inherit"}}
             />
           </div>
+          {v.showHSplitter !== false && v.showDockedNotes !== false && v.showDockedThought !== false ? (
           <div onMouseDown={v.startResizeH} style={{width: "5px", flex: "none", cursor: "col-resize", background: "var(--border)", position: "relative"}}>
             <div style={{position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", height: "36px", width: "3px", borderRadius: "2px", background: "var(--handle)"}} />
           </div>
-          <div style={{width: `${v.thoughtWidth}px`, flex: "none", display: (v.showDockedThought === false ? "none" : "flex"), flexDirection: "column", background: "var(--panel-bg)"}}>
-            <div style={{height: "26px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", fontSize: "11.5px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--divider)"}}>
-              {" Thought "}
-              <div style={{marginLeft: "auto", display: "flex", gap: "10px", color: "var(--text-faint)", fontSize: "11px"}}>
+          ) : null}
+          <div style={css(v.dockedThoughtStyle || (v.showDockedThought === false ? "display:none" : "display:flex;flex-direction:column;background:var(--panel-bg);min-width:0"))}>
+            <div style={{height: "26px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", fontSize: "11.5px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--divider)", minWidth: 0}}>
+              <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{v.thoughtPanelTitle || "Thought"}</span>
+              <div style={{marginLeft: "auto", display: "flex", gap: "10px", color: "var(--text-faint)", fontSize: "11px", flex: "none"}}>
                 <span onClick={v.toggleThoughtDock} style={{cursor: "pointer"}} title="Undock">{"⧉"}</span>
                 <span onClick={v.closeThoughtPanel} style={{cursor: "pointer"}} title="Close">{"✕"}</span>
               </div>
             </div>
-            <div style={{padding: "10px 12px", borderBottom: "1px solid var(--divider)"}}>
-              <div style={{height: "26px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", padding: "0 8px", fontSize: "12.5px", marginBottom: "6px"}}>
+            <div style={{padding: "10px 12px", borderBottom: "1px solid var(--divider)", flex: "none", minWidth: 0, boxSizing: "border-box", width: "100%"}}>
+              <div style={{height: "26px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", padding: "0 8px", fontSize: "12.5px", marginBottom: "6px", width: "100%", boxSizing: "border-box", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
                 {v.activeThought?.title}
               </div>
-              <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                <span style={{fontSize: "11px", color: "var(--text-muted)"}}>
+              <div style={{display: "flex", alignItems: "center", gap: "8px", minWidth: 0, width: "100%"}}>
+                <span style={{fontSize: "11px", color: "var(--text-muted)", flex: "none"}}>
                   {"Label:"}
                 </span>
-                <div style={{flex: "1", height: "22px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)"}} />
+                <div style={{flex: "1", minWidth: 0, height: "22px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", boxSizing: "border-box"}} />
               </div>
             </div>
-            <div style={{display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderBottom: "1px solid var(--divider)"}}>
+            <div style={{display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderBottom: "1px solid var(--divider)", flex: "none", flexWrap: "wrap", minWidth: 0, width: "100%", boxSizing: "border-box"}}>
               <div dangerouslySetInnerHTML={v.icons?.addChild} style={css(v.toolIconStyleSm)} />
               <div dangerouslySetInnerHTML={v.icons?.image} style={css(v.toolIconStyleSm)} />
               <div dangerouslySetInnerHTML={v.icons?.cut} style={css(v.toolIconStyleSm)} />
@@ -343,7 +507,7 @@ export default function renderTemplate(v) {
                 </span>
               </div>
             </div>
-            <div style={{flex: "1", padding: "12px 14px", overflow: "auto"}}>
+            <div style={{flex: "1", padding: "12px 14px", overflow: "auto", minHeight: 0, minWidth: 0, width: "100%", boxSizing: "border-box"}}>
               {v.isThoughtTab ? (
                 <>
                   <div style={{fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.6", marginBottom: "12px"}}>
@@ -381,12 +545,12 @@ export default function renderTemplate(v) {
               ) : null}
               {v.isSearchTab ? (
                 <>
-                  <input type="text" value={v.panelSearch || ""} onChange={v.setPanelSearch} placeholder="Search…" style={{height: "24px", width: "100%", boxSizing: "border-box", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", marginBottom: "10px", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none"}} />
+                  <input type="text" value={v.panelSearch || ""} onChange={v.setPanelSearch} placeholder="Search…" style={{height: "24px", width: "100%", maxWidth: "100%", boxSizing: "border-box", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", marginBottom: "10px", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none"}} />
                   {(v.searchResults || []).map((r, $index) => (
                     <React.Fragment key={r?.id ?? $index}>
-                      <div style={{display: "flex", alignItems: "center", gap: "8px", padding: "6px 4px", fontSize: "12px", color: "var(--text-secondary)"}}>
-                        <div style={{width: "7px", height: "7px", borderRadius: "2px", background: `${r?.color}`}} />
-                        {r?.title}{" "}
+                      <div style={{display: "flex", alignItems: "center", gap: "8px", padding: "6px 4px", fontSize: "12px", color: "var(--text-secondary)", minWidth: 0}}>
+                        <div style={{width: "7px", height: "7px", borderRadius: "2px", background: `${r?.color}`, flex: "none"}} />
+                        <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{r?.title}{" "}</span>
                       </div>
                     </React.Fragment>
                   ))}
@@ -403,11 +567,11 @@ export default function renderTemplate(v) {
                 <>
                   {(v.upcomingEvents || []).map((ev, $index) => (
                     <React.Fragment key={ev?.id ?? $index}>
-                      <div style={{display: "flex", gap: "10px", padding: "6px 0", borderBottom: "1px solid var(--divider)"}}>
-                        <div style={{fontSize: "11px", color: "var(--text-muted)", width: "60px"}}>
+                      <div style={{display: "flex", gap: "10px", padding: "6px 0", borderBottom: "1px solid var(--divider)", minWidth: 0}}>
+                        <div style={{fontSize: "11px", color: "var(--text-muted)", width: "60px", flex: "none"}}>
                           {ev?.date}
                         </div>
-                        <div style={{fontSize: "12px"}}>
+                        <div style={{fontSize: "12px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis"}}>
                           {ev?.title}
                         </div>
                       </div>
@@ -416,7 +580,7 @@ export default function renderTemplate(v) {
                 </>
               ) : null}
             </div>
-            <div style={{height: "28px", flex: "none", display: "flex", alignItems: "center", gap: "2px", padding: "0 10px", borderTop: "1px solid var(--divider)"}}>
+            <div style={{height: "28px", flex: "none", display: "flex", alignItems: "center", gap: "2px", padding: "0 10px", borderTop: "1px solid var(--divider)", minWidth: 0, overflowX: "auto"}}>
               {(v.thoughtTabs || []).map((tb, $index) => (
                 <React.Fragment key={tb?.id ?? $index}>
                   <div onClick={tb?.onClick} style={css(tb?.style)}>
@@ -1747,6 +1911,134 @@ export default function renderTemplate(v) {
           </>
         ) : null}
         
+      {/* Floating tools-bar host (contains docked-mode toolboxes while bar itself floats) */}
+      {v.showFloatToolsBar ? (
+        <div
+          onMouseDown={v.stopProp}
+          className="mn-tools-bar mn-tools-bar-float"
+          style={{
+            position: "absolute",
+            left: (v.toolsBar?.x || 48) + "px",
+            top: (v.toolsBar?.y || 48) + "px",
+            zIndex: 55,
+            minHeight: "34px",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "4px 6px",
+            background: "var(--toolbar-bg)",
+            border: "1px solid var(--input-border-strong)",
+            borderRadius: "6px",
+            boxShadow: "0 12px 28px rgba(0,0,0,0.45)",
+          }}
+        >
+          <div
+            title="Drag tools-bar"
+            onMouseDown={v.toolsBar?.onGripMouseDown}
+            style={{
+              width: "10px",
+              height: "22px",
+              flex: "none",
+              cursor: "move",
+              borderRadius: "2px",
+              backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+              backgroundSize: "3px 3px",
+              backgroundPosition: "center",
+            }}
+          />
+          <span style={{fontSize: "10.5px", color: "var(--text-muted)", fontWeight: 600, marginRight: "4px", userSelect: "none"}}>{"Tools"}</span>
+          {(v.dockedToolboxes || []).map((tb) => (
+            <div
+              key={tb.id}
+              className="mn-toolbox"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "2px",
+                height: "28px",
+                padding: "0 4px 0 2px",
+                borderRadius: "3px",
+                border: "1px solid var(--divider)",
+                background: "var(--chip-bg)",
+                flex: "none",
+              }}
+            >
+              <div
+                title={`Drag ${tb.label}`}
+                onMouseDown={tb.onGripMouseDown}
+                style={{
+                  width: "8px",
+                  height: "20px",
+                  flex: "none",
+                  cursor: "move",
+                  backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+                  backgroundSize: "3px 3px",
+                  backgroundPosition: "center",
+                }}
+              />
+              {(tb.tools || []).map((tool) => renderToolboxTool(tool, v))}
+            </div>
+          ))}
+          <span onClick={v.toolsBar?.onToggleDock} title="Dock tools-bar" style={{cursor: "pointer", fontSize: "11px", color: "var(--text-faint)", padding: "0 4px"}}>{"⬇"}</span>
+          <span onClick={v.toolsBar?.onClose} title="Hide tools-bar" style={{cursor: "pointer", fontSize: "11px", color: "var(--text-faint)", padding: "0 4px"}}>{"✕"}</span>
+        </div>
+      ) : null}
+
+      {/* Individually floating toolboxes */}
+      {(v.floatToolboxes || []).map((tb) => (
+        <div
+          key={tb.id}
+          onMouseDown={v.stopProp}
+          className="mn-toolbox mn-toolbox-float"
+          style={{
+            position: "absolute",
+            left: (tb.x || 120) + "px",
+            top: (tb.y || 70) + "px",
+            zIndex: 56,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: "120px",
+            background: "var(--toolbar-bg)",
+            border: "1px solid var(--input-border-strong)",
+            borderRadius: "6px",
+            boxShadow: "0 12px 28px rgba(0,0,0,0.5)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            onMouseDown={tb.onGripMouseDown}
+            style={{
+              height: "22px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "0 6px",
+              cursor: "move",
+              borderBottom: "1px solid var(--divider)",
+              background: "var(--chip-bg)",
+              userSelect: "none",
+            }}
+          >
+            <div
+              style={{
+                width: "8px",
+                height: "14px",
+                flex: "none",
+                backgroundImage: "radial-gradient(var(--handle) 1px, transparent 1.2px)",
+                backgroundSize: "3px 3px",
+                backgroundPosition: "center",
+              }}
+            />
+            <span style={{fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{tb.label}</span>
+            <span onClick={tb.onToggleDock} title="Dock toolbox" style={{cursor: "pointer", fontSize: "10px", color: "var(--text-faint)", padding: "0 2px"}}>{"⬇"}</span>
+            <span onClick={tb.onClose} title="Close toolbox" style={{cursor: "pointer", fontSize: "11px", color: "var(--text-faint)", padding: "0 2px"}}>{"✕"}</span>
+          </div>
+          <div style={{display: "flex", alignItems: "center", gap: "2px", padding: "4px 6px"}}>
+            {(tb.tools || []).map((tool) => renderToolboxTool(tool, v))}
+          </div>
+        </div>
+      ))}
+
       {v.showFloatNotes ? (
         <div onMouseDown={v.stopProp} style={{position: "absolute", left: (v.notesPanel?.x || 80) + "px", top: (v.notesPanel?.y || 120) + "px", width: (v.notesPanel?.w || 520) + "px", height: (v.notesPanel?.h || 280) + "px", zIndex: 50, background: "var(--panel-bg)", border: "1px solid var(--input-border-strong)", borderRadius: "8px", boxShadow: "0 16px 40px rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", overflow: "hidden"}}>
           <div onMouseDown={v.startNotesFloatDrag} style={{height: "28px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", cursor: "move", borderBottom: "1px solid var(--divider)", fontSize: "12px", fontWeight: 600, color: "var(--text-muted)"}}>
@@ -1756,24 +2048,86 @@ export default function renderTemplate(v) {
               <span onClick={v.closeNotesPanel} style={{cursor: "pointer"}}>{"✕"}</span>
             </div>
           </div>
-          <textarea value={v.notesDraft ?? ""} onChange={v.onNotesChange} style={{flex: 1, border: "none", outline: "none", background: "transparent", padding: "12px", color: "var(--text-secondary)", fontFamily: "inherit", fontSize: "12.5px", resize: "none"}} />
+          <textarea value={v.notesDraft ?? ""} onChange={v.onNotesChange} style={{flex: 1, minHeight: 0, width: "100%", maxWidth: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", padding: "12px", color: "var(--text-secondary)", fontFamily: "inherit", fontSize: "12.5px", resize: "none"}} />
           <div onMouseDown={v.startNotesFloatResize} style={{position: "absolute", right: 0, bottom: 0, width: 14, height: 14, cursor: "nwse-resize"}} />
         </div>
       ) : null}
+      
       {v.showFloatThought ? (
-        <div onMouseDown={v.stopProp} style={{position: "absolute", left: (v.thoughtPanel?.x || 640) + "px", top: (v.thoughtPanel?.y || 120) + "px", width: (v.thoughtPanel?.w || 420) + "px", height: (v.thoughtPanel?.h || 320) + "px", zIndex: 50, background: "var(--panel-bg)", border: "1px solid var(--input-border-strong)", borderRadius: "8px", boxShadow: "0 16px 40px rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", overflow: "hidden"}}>
-          <div onMouseDown={v.startThoughtFloatDrag} style={{height: "28px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", cursor: "move", borderBottom: "1px solid var(--divider)", fontSize: "12px", fontWeight: 600, color: "var(--text-muted)"}}>
-            {"Thought"}
-            <div style={{marginLeft: "auto", display: "flex", gap: "8px"}}>
-              <span onClick={v.toggleThoughtDock} style={{cursor: "pointer"}} title="Dock">{"⬇"}</span>
+        <div onMouseDown={v.stopProp} style={{position: "absolute", left: (v.thoughtPanel?.x || 640) + "px", top: (v.thoughtPanel?.y || 120) + "px", width: (v.thoughtPanel?.w || 420) + "px", height: (v.thoughtPanel?.h || 420) + "px", zIndex: 50, background: "var(--panel-bg)", border: "1px solid var(--input-border-strong)", borderRadius: "8px", boxShadow: "0 16px 40px rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, boxSizing: "border-box"}}>
+          <div onMouseDown={v.startThoughtFloatDrag} style={{height: "28px", flex: "none", display: "flex", alignItems: "center", padding: "0 10px", cursor: "move", borderBottom: "1px solid var(--divider)", fontSize: "12px", fontWeight: 600, color: "var(--text-muted)", minWidth: 0}}>
+            <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{v.thoughtPanelTitle || "Thought"}</span>
+            <div style={{marginLeft: "auto", display: "flex", gap: "8px", flex: "none"}}>
+              <span onClick={v.toggleThoughtDock} style={{cursor: "pointer"}} title="Dock to bottom">{"⬇"}</span>
               <span onClick={v.closeThoughtPanel} style={{cursor: "pointer"}}>{"✕"}</span>
             </div>
           </div>
-          <div style={{padding: "10px 12px", fontSize: "13px", fontWeight: 600}}>{v.activeThought?.title}</div>
-          <div style={{padding: "0 12px", fontSize: "12px", color: "var(--text-muted)"}}>{"Type: "}{v.activeThought?.type}</div>
+          <div style={{padding: "10px 12px", borderBottom: "1px solid var(--divider)", flex: "none", minWidth: 0, width: "100%", boxSizing: "border-box"}}>
+            <div style={{height: "26px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", display: "flex", alignItems: "center", padding: "0 8px", fontSize: "12.5px", marginBottom: "6px", width: "100%", boxSizing: "border-box", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+              {v.activeThought?.title}
+            </div>
+            <div style={{display: "flex", alignItems: "center", gap: "8px", minWidth: 0, width: "100%"}}>
+              <span style={{fontSize: "11px", color: "var(--text-muted)", flex: "none"}}>{"Label:"}</span>
+              <div style={{flex: "1", minWidth: 0, height: "22px", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", boxSizing: "border-box"}} />
+            </div>
+          </div>
+          <div style={{display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderBottom: "1px solid var(--divider)", flex: "none", flexWrap: "wrap", minWidth: 0, width: "100%", boxSizing: "border-box"}}>
+            <div dangerouslySetInnerHTML={v.icons?.addChild} style={css(v.toolIconStyleSm)} />
+            <div dangerouslySetInnerHTML={v.icons?.image} style={css(v.toolIconStyleSm)} />
+            <div dangerouslySetInnerHTML={v.icons?.cut} style={css(v.toolIconStyleSm)} />
+            <div dangerouslySetInnerHTML={v.icons?.copy} style={css(v.toolIconStyleSm)} />
+            <div dangerouslySetInnerHTML={v.icons?.trash} style={css(v.toolIconStyleSm)} />
+            <div style={{marginLeft: "auto", fontSize: "10.5px", color: "var(--text-muted)"}}>{"Type: "}{v.activeThought?.type}</div>
+          </div>
+          <div style={{flex: "1", padding: "12px 14px", overflow: "auto", minHeight: 0, minWidth: 0, width: "100%", boxSizing: "border-box"}}>
+            {v.isThoughtTab ? (
+              <div style={{fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.6"}}>
+                {"Parent, child, and jump links for "}
+                <b style={{color: "var(--text-secondary)"}}>{v.activeThought?.title}</b>
+                {" are shown in the Plex."}
+              </div>
+            ) : null}
+            {v.isTagsTab ? (
+              <div style={{display: "flex", flexWrap: "wrap", gap: "6px"}}>
+                {(v.activeThought?.tags || []).map((tg, ix) => (
+                  <div key={ix} style={{fontSize: "11px", padding: "4px 10px", borderRadius: "100px", background: "var(--chip-bg)", color: "var(--text-secondary)"}}>{tg}</div>
+                ))}
+              </div>
+            ) : null}
+            {v.isSearchTab ? (
+              <>
+                <input type="text" value={v.panelSearch || ""} onChange={v.setPanelSearch} placeholder="Search…" style={{height: "24px", width: "100%", maxWidth: "100%", boxSizing: "border-box", borderRadius: "5px", background: "var(--input-bg)", border: "1px solid var(--input-border)", marginBottom: "10px", padding: "0 8px", fontSize: "12px", color: "var(--text)", outline: "none"}} />
+                {(v.searchResults || []).map((r, ix) => (
+                  <div key={ix} style={{display: "flex", alignItems: "center", gap: "8px", padding: "6px 4px", fontSize: "12px", color: "var(--text-secondary)", minWidth: 0}}>
+                    <div style={{width: "7px", height: "7px", borderRadius: "2px", background: `${r?.color}`, flex: "none"}} />
+                    <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{r?.title}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            {v.isReportsTab ? (
+              <div style={{fontSize: "12px", color: "var(--text-muted)"}}>{"Reports summarize thought counts and link statistics."}</div>
+            ) : null}
+            {v.isCalendarTab ? (
+              <>
+                {(v.upcomingEvents || []).map((ev, ix) => (
+                  <div key={ix} style={{display: "flex", gap: "10px", padding: "6px 0", borderBottom: "1px solid var(--divider)", minWidth: 0}}>
+                    <div style={{fontSize: "11px", color: "var(--text-muted)", width: "60px", flex: "none"}}>{ev?.date}</div>
+                    <div style={{fontSize: "12px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis"}}>{ev?.title}</div>
+                  </div>
+                ))}
+              </>
+            ) : null}
+          </div>
+          <div style={{display: "flex", alignItems: "center", gap: "2px", padding: "4px 10px", borderTop: "1px solid var(--divider)", flex: "none", minHeight: "28px", minWidth: 0, overflowX: "auto"}}>
+            {(v.thoughtTabs || []).map((tb, ix) => (
+              <div key={tb?.id ?? ix} onClick={tb?.onClick} style={css(tb?.style)}>{tb?.label}</div>
+            ))}
+          </div>
           <div onMouseDown={v.startThoughtFloatResize} style={{position: "absolute", right: 0, bottom: 0, width: 14, height: 14, cursor: "nwse-resize"}} />
         </div>
       ) : null}
+
 
 {v.toast ? (
           <>

@@ -162,6 +162,60 @@ export function addAttachmentStub(thoughtId, name, kind) {
   return row;
 }
 
+/**
+ * UI prefs that will later live inside a .brain (or sidecar) on load/save.
+ * Phase 1: in-memory + localStorage so splitter position survives reloads.
+ * Phase 2 / .brain loader should call getUiPrefs/setUiPrefs (or merge these keys).
+ */
+const UI_PREFS_STORAGE_KEY = 'mnemosyne.uiPrefs';
+const DEFAULT_UI_PREFS = {
+  /** Fraction of the docked bottom row width owned by the Thought pane (0..1). Default 50/50. */
+  thoughtSplitRatio: 0.5,
+};
+
+function readStoredUiPrefs() {
+  try {
+    if (typeof localStorage === 'undefined') return {};
+    const raw = localStorage.getItem(UI_PREFS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+let uiPrefsStore = { ...DEFAULT_UI_PREFS, ...readStoredUiPrefs() };
+
+function clampThoughtSplitRatio(r) {
+  const n = Number(r);
+  if (!Number.isFinite(n)) return DEFAULT_UI_PREFS.thoughtSplitRatio;
+  return Math.min(0.85, Math.max(0.15, n));
+}
+
+export function getUiPrefs() {
+  return {
+    ...uiPrefsStore,
+    thoughtSplitRatio: clampThoughtSplitRatio(uiPrefsStore.thoughtSplitRatio),
+  };
+}
+
+export function setUiPrefs(partial = {}) {
+  const next = { ...uiPrefsStore, ...partial };
+  if (partial.thoughtSplitRatio != null) {
+    next.thoughtSplitRatio = clampThoughtSplitRatio(partial.thoughtSplitRatio);
+  }
+  uiPrefsStore = next;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(uiPrefsStore));
+    }
+  } catch {
+    /* ignore quota / private mode */
+  }
+  return getUiPrefs();
+}
+
 /** Marker so handback / tooling can locate the seam. */
 export const PHASE2_SEAM = {
   module: 'src/dataApi.js',
@@ -174,5 +228,8 @@ export const PHASE2_SEAM = {
     'createChildThought',
     'listAttachments',
     'addAttachmentStub',
+    'getUiPrefs',
+    'setUiPrefs',
   ],
+  uiPrefsForBrainLoad: ['thoughtSplitRatio'],
 };

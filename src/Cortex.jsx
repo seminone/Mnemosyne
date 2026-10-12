@@ -3,9 +3,80 @@ import renderTemplate from './template.jsx';
 import * as dataApi from './dataApi.js';
 
 export default class Cortex extends React.Component {
+  // Single source of truth for Thought-pane tabs — add entries here to grow the tab strip + title bar.
+  thoughtTabDefs = [
+    { id: 'thought', label: 'Thought' },
+    { id: 'tags', label: 'Tags' },
+    { id: 'search', label: 'Search' },
+    { id: 'reports', label: 'Reports' },
+    { id: 'calendar', label: 'Calendar' },
+  ];
+
+  // Office-2003-style toolboxes. Add entries here to grow the tools-bar; each can dock/float independently.
+  toolboxDefs = [
+    {
+      id: 'navigation',
+      label: 'Navigation',
+      tools: [
+        { id: 'back', iconKey: 'back', title: 'Previous view', action: 'navBack' },
+        { id: 'fwd', iconKey: 'fwd', title: 'Next view', action: 'navFwd' },
+        { id: 'home', iconKey: 'home', title: 'Home thought', action: 'goHome' },
+      ],
+    },
+    {
+      id: 'view',
+      label: 'View',
+      tools: [
+        { id: 'pin', iconKey: 'pin', title: 'Create pin', action: 'stub:Create Pin' },
+        { id: 'plus', iconKey: 'plus', title: 'Expand', action: 'stub:Expand' },
+        { id: 'minus', iconKey: 'minus', title: 'Collapse', action: 'stub:Collapse' },
+        { id: 'refresh', iconKey: 'refresh', title: 'Refresh plex', action: 'stub:Refresh' },
+        // Moved from plex overlay (top-right): zoom readout + full-display toggle
+        { id: 'zoom', kind: 'label', title: 'Zoom level — click to reset view', action: 'resetZoom', labelKey: 'zoom' },
+        { id: 'fullscreen', iconKey: 'fullscreen', title: 'Toggle full display', action: 'toggleFullscreen' },
+      ],
+    },
+    {
+      id: 'sync',
+      label: 'Sync',
+      tools: [
+        { id: 'sync', iconKey: 'sync', title: 'Synchronize', action: 'stub:Synchronize' },
+        { id: 'unsync', iconKey: 'unsync', title: 'Unsynchronize', action: 'stub:Unsynchronize' },
+      ],
+    },
+    {
+      id: 'memory',
+      label: 'Memory',
+      tools: [
+        // Former tools-bar right-side gauges — room for more memory tools later
+        { id: 'memUsed', kind: 'label', title: 'Memory used (click to refresh)', action: 'refreshMemory', labelKey: 'memUsed' },
+        { id: 'memFree', kind: 'label', title: 'Memory free (click to refresh)', action: 'refreshMemory', labelKey: 'memFree' },
+      ],
+    },
+  ];
+
   state = {
     openMenu: null, openSubmenu: null, dialog: null,
-    thoughtTab: 'thought', selectedId: 'main', scale: 1, bottomHeight: 246, thoughtWidth: 420,
+    thoughtTab: 'thought', selectedId: 'main', scale: 1, bottomHeight: 246,
+    // Share of docked bottom width for Thought (Notes gets the rest). Default 50/50; persisted via dataApi.
+    thoughtSplitRatio: 0.5,
+    // Tools-bar host strip (may be empty/invisible; floatable like Office 2003 toolbars).
+    toolsBar: { visible: true, mode: 'docked', x: 48, y: 48 },
+    // Per-toolbox layout. order = left-to-right when docked. mode docked|float.
+    toolboxes: {
+      navigation: { visible: true, mode: 'docked', order: 0, x: 80, y: 70 },
+      view: { visible: true, mode: 'docked', order: 1, x: 260, y: 70 },
+      sync: { visible: true, mode: 'docked', order: 2, x: 460, y: 70 },
+      memory: { visible: true, mode: 'docked', order: 3, x: 620, y: 70 },
+    },
+    // Displayed in Memory toolbox gauges (MB). Updated on a light timer / click-refresh.
+    memoryStats: { usedMb: 46.6, freeMb: 59.1 },
+    // Favorites / pinned-thoughts bar (below tools-bar). Pins + OS snippets/links later.
+    favoritesBar: { visible: true },
+    // Ordered pin slots: { id, thoughtId, kind: 'thought'|'snippet'|'hyperlink'|'property', label?, href? }
+    favorites: [],
+    navHistory: ['main'],
+    navIndex: 0,
     // fitScale = window fit of 1600x1000 chrome; camera = user pan/zoom on Plex content
     panning: false, panOrigin: null,
     camera: {
@@ -25,7 +96,7 @@ export default class Cortex extends React.Component {
     searchHits: [], // HUD chips: { id, title }[] — not affected by camera
     panelSearch: '',
     notesPanel: { visible: true, mode: 'docked', x: 80, y: 120, w: 520, h: 280 },
-    thoughtPanel: { visible: true, mode: 'docked', x: 640, y: 120, w: 420, h: 320 },
+    thoughtPanel: { visible: true, mode: 'docked', x: 640, y: 120, w: 420, h: 420 },
     dialogBox: { x: 0, y: 0, w: 0, h: 0 },
     toggles: { showToolbar: true, advancedToolsLayout: true, spellcheck: true, wander: false,
       alwaysOnTop: false, float: true, autoHideLeft: false, autoHideRight: false, autoHideTop: false, autoHideBottom: false, presentationMode: false, transparentMode: false },
@@ -41,6 +112,8 @@ export default class Cortex extends React.Component {
     { name: 'WTA_Labor_III_a', role: 'WTA Genus Labor III_a — built Phase 1 Mnemosyne Electron + JS shell from Consilium mandate; mockup encapsulation; dataApi seam; initial handback.' },
     { name: 'WTA_Labor_III_b', role: 'WTA Genus Labor III_b — runtime fixes (Vite watch, GPU); Phase 1 acceptance testing with Nelson; Track A upgrade backlog documentation.' },
     { name: 'WTA_Labor_III_c', role: 'WTA Genus Labor III_c — Track A implementation (node drag, context menus, resizable/movable dialogs, Search, panel dock/undock, rebrand, About dialog); continuation of Mnemosyne GUI shell.' },
+    { name: 'WTA_Labor_III_d', role: 'WTA Genus Labor III_d — Thought tab title reflection, Notes/Thought 50/50 splitter, Office-2003-style floatable toolboxes/tools-bar; Memory toolbox; session handback before workstation restart.' },
+    { name: 'WTA_Labor_III_e', role: 'WTA Genus Labor III_e — successor to III_d; Favorites (pinned thoughts) bar placeholder; git backup of III_d work; continuing Mnemosyne GUI shell.' },
   ];
 
 
@@ -268,9 +341,398 @@ export default class Cortex extends React.Component {
       this.pushCameraHistorySnapshot();
     }
   }
-  selectThought(id) {
+  selectThought(id, opts = {}) {
     const th = dataApi.getThought(id) || this.thoughtsData[id];
-    this.setState({ selectedId: id, notesDraft: (th && th.notes) || '', openMenu: null, openSubmenu: null });
+    const skipHist = !!(opts && opts.skipHistory);
+    this.setState((prev) => {
+      const next = { selectedId: id, notesDraft: (th && th.notes) || '', openMenu: null, openSubmenu: null, contextMenu: null };
+      if (!skipHist && id && id !== prev.selectedId) {
+        const base = (prev.navHistory || ['main']).slice(0, (prev.navIndex ?? 0) + 1);
+        if (base[base.length - 1] !== id) base.push(id);
+        next.navHistory = base.slice(-80);
+        next.navIndex = next.navHistory.length - 1;
+      }
+      return next;
+    });
+  }
+
+  navBack() {
+    const hist = this.state.navHistory || [];
+    const idx = this.state.navIndex ?? 0;
+    if (idx <= 0 || !hist.length) { this.showToast('No previous view.'); return; }
+    const nextIdx = idx - 1;
+    const id = hist[nextIdx];
+    this.setState({ navIndex: nextIdx });
+    this.selectThought(id, { skipHistory: true });
+  }
+
+  navFwd() {
+    const hist = this.state.navHistory || [];
+    const idx = this.state.navIndex ?? 0;
+    if (idx >= hist.length - 1) { this.showToast('No next view.'); return; }
+    const nextIdx = idx + 1;
+    const id = hist[nextIdx];
+    this.setState({ navIndex: nextIdx });
+    this.selectThought(id, { skipHistory: true });
+  }
+
+  runToolAction(action) {
+    if (!action) return;
+    if (action === 'navBack') return this.navBack();
+    if (action === 'navFwd') return this.navFwd();
+    if (action === 'goHome') return this.selectThought('main');
+    if (action === 'resetZoom') return this.resetCameraView(true);
+    if (action === 'toggleFullscreen') return this.handleWindowMaximize();
+    if (action === 'refreshMemory') return this.refreshMemoryStats(true);
+    if (typeof action === 'string' && action.startsWith('stub:')) {
+      return this.stubAction(action.slice(5));
+    }
+    this.stubAction(String(action));
+  }
+
+  formatMemMb(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '—';
+    return (Math.round(v * 10) / 10).toFixed(1) + ' MB';
+  }
+
+  refreshMemoryStats(showToast = false) {
+    let usedMb = this.state.memoryStats?.usedMb ?? 46.6;
+    let freeMb = this.state.memoryStats?.freeMb ?? 59.1;
+    try {
+      // Chromium: performance.memory (may be absent).
+      const pm = (typeof performance !== 'undefined' && performance.memory) ? performance.memory : null;
+      if (pm && pm.usedJSHeapSize != null) {
+        usedMb = pm.usedJSHeapSize / (1024 * 1024);
+        const limit = pm.jsHeapSizeLimit || (usedMb + freeMb) * 1024 * 1024;
+        freeMb = Math.max(0, (limit - pm.usedJSHeapSize) / (1024 * 1024));
+      } else if (typeof process !== 'undefined' && process.memoryUsage) {
+        const mu = process.memoryUsage();
+        usedMb = (mu.heapUsed || mu.rss || 0) / (1024 * 1024);
+        // No true free heap in process.memoryUsage — keep a plausible free band.
+        freeMb = Math.max(8, 128 - usedMb);
+      }
+    } catch {
+      /* keep previous / defaults */
+    }
+    this.setState({ memoryStats: { usedMb, freeMb } });
+    if (showToast) this.showToast('Memory gauges refreshed.');
+  }
+
+  getToolLabel(labelKey) {
+    if (labelKey === 'zoom') {
+      return Math.round(((this.state.camera && this.state.camera.zoom) || 1) * 100) + '%';
+    }
+    const mem = this.state.memoryStats || { usedMb: 46.6, freeMb: 59.1 };
+    if (labelKey === 'memUsed') return this.formatMemMb(mem.usedMb) + ' Used';
+    if (labelKey === 'memFree') return this.formatMemMb(mem.freeMb) + ' Free';
+    return '';
+  }
+
+  defaultToolboxLayout() {
+    const out = {};
+    (this.toolboxDefs || []).forEach((def, i) => {
+      out[def.id] = {
+        visible: true,
+        mode: 'docked',
+        order: i,
+        x: 80 + i * 180,
+        y: 70,
+      };
+    });
+    return out;
+  }
+
+  resetToolsLayout() {
+    this.setState({
+      openMenu: null,
+      openSubmenu: null,
+      toolsBar: { visible: true, mode: 'docked', x: 48, y: 48 },
+      toolboxes: this.defaultToolboxLayout(),
+      toggles: { ...this.state.toggles, showToolbar: true },
+    });
+    this.showToast('Tools layout reset.');
+  }
+
+  /** View → Toolboxes: master visibility for the tools-bar host (checkmark when on). */
+  toggleToolboxesMenu() {
+    this.setState((prev) => {
+      const on = !(prev.toolsBar && prev.toolsBar.visible);
+      const toolboxes = { ...(prev.toolboxes || {}) };
+      if (on) {
+        // Ensure at least Navigation (or first def) is visible so the bar has content.
+        const anyVisible = Object.values(toolboxes).some((t) => t && t.visible);
+        if (!anyVisible) {
+          const first = (this.toolboxDefs || [])[0];
+          if (first) {
+            toolboxes[first.id] = {
+              ...(toolboxes[first.id] || { order: 0, x: 80, y: 70 }),
+              visible: true,
+              mode: 'docked',
+            };
+          }
+        }
+      }
+      return {
+        openMenu: null,
+        openSubmenu: null,
+        toolsBar: { ...(prev.toolsBar || {}), visible: on, mode: on ? (prev.toolsBar?.mode || 'docked') : (prev.toolsBar?.mode || 'docked') },
+        toolboxes,
+        toggles: { ...prev.toggles, showToolbar: on },
+      };
+    });
+  }
+
+  closeToolbox(id) {
+    this.setState((prev) => {
+      const toolboxes = {
+        ...prev.toolboxes,
+        [id]: { ...(prev.toolboxes[id] || {}), visible: false },
+      };
+      const anyVisible = Object.values(toolboxes).some((t) => t && t.visible);
+      // Lonely/last toolbox closed → tools-bar becomes invisible until View → Toolboxes.
+      const toolsBar = {
+        ...(prev.toolsBar || {}),
+        visible: anyVisible ? !!(prev.toolsBar && prev.toolsBar.visible) : false,
+      };
+      if (!anyVisible) toolsBar.visible = false;
+      return {
+        toolboxes,
+        toolsBar,
+        toggles: { ...prev.toggles, showToolbar: !!toolsBar.visible },
+      };
+    });
+  }
+
+  toggleToolboxDock(id) {
+    this.setState((prev) => {
+      const cur = prev.toolboxes[id] || { visible: true, mode: 'docked', order: 0, x: 120, y: 70 };
+      const mode = cur.mode === 'docked' ? 'float' : 'docked';
+      return {
+        toolboxes: {
+          ...prev.toolboxes,
+          [id]: { ...cur, mode, visible: true },
+        },
+        toolsBar: { ...(prev.toolsBar || {}), visible: true },
+        toggles: { ...prev.toggles, showToolbar: true },
+      };
+    });
+  }
+
+  toggleToolsBarDock() {
+    this.setState((prev) => {
+      const bar = prev.toolsBar || { visible: true, mode: 'docked', x: 48, y: 48 };
+      const mode = bar.mode === 'docked' ? 'float' : 'docked';
+      // When re-docking the host bar, also re-dock any floating toolboxes into it.
+      let toolboxes = prev.toolboxes;
+      if (mode === 'docked') {
+        toolboxes = { ...prev.toolboxes };
+        Object.keys(toolboxes).forEach((k) => {
+          if (toolboxes[k] && toolboxes[k].visible && toolboxes[k].mode === 'float') {
+            toolboxes[k] = { ...toolboxes[k], mode: 'docked' };
+          }
+        });
+      }
+      return {
+        toolsBar: { ...bar, mode, visible: true },
+        toolboxes,
+        toggles: { ...prev.toggles, showToolbar: true },
+      };
+    });
+  }
+
+  startToolboxDrag(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    const scale = this.state.scale || 1;
+    const tb = (this.state.toolboxes && this.state.toolboxes[id]) || { x: 120, y: 70, mode: 'docked' };
+    const start = { x: e.clientX, y: e.clientY, px: tb.x || 120, py: tb.y || 70, mode: tb.mode || 'docked', moved: false };
+    const DOCK_Y_MAX = 70; // layout px under menu — drop here to dock into tools-bar
+    const onMove = (ev) => {
+      const dx = (ev.clientX - start.x) / scale;
+      const dy = (ev.clientY - start.y) / scale;
+      if (!start.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) start.moved = true;
+      if (!start.moved) return;
+      // Undock on significant drag away from dock strip.
+      const chrome = this.wrapRef.current && this.wrapRef.current.querySelector
+        ? null
+        : null;
+      void chrome;
+      // Convert pointer to chrome-local coords roughly via scaled root child.
+      const root = this.wrapRef.current && this.wrapRef.current.firstElementChild;
+      let localY = dy + (start.mode === 'float' ? start.py : 34);
+      if (root) {
+        const r = root.getBoundingClientRect();
+        localY = (ev.clientY - r.top) / scale;
+      }
+      const wantFloat = localY > DOCK_Y_MAX + 12;
+      this.setState((prev) => {
+        const cur = prev.toolboxes[id] || {};
+        const nx = start.mode === 'float' || wantFloat
+          ? (start.mode === 'float' ? start.px + dx : Math.max(8, (root ? (ev.clientX - root.getBoundingClientRect().left) / scale : start.px) - 20))
+          : cur.x;
+        const ny = start.mode === 'float' || wantFloat
+          ? (start.mode === 'float' ? start.py + dy : Math.max(30, localY - 10))
+          : cur.y;
+        return {
+          toolboxes: {
+            ...prev.toolboxes,
+            [id]: {
+              ...cur,
+              visible: true,
+              mode: wantFloat ? 'float' : (start.mode === 'docked' && !wantFloat ? 'docked' : (wantFloat ? 'float' : cur.mode)),
+              x: wantFloat || cur.mode === 'float' ? nx : cur.x,
+              y: wantFloat || cur.mode === 'float' ? ny : cur.y,
+            },
+          },
+          toolsBar: { ...(prev.toolsBar || {}), visible: true },
+        };
+      });
+    };
+    const onUp = (ev) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if (!start.moved) return;
+      const root = this.wrapRef.current && this.wrapRef.current.firstElementChild;
+      let localY = 100;
+      let localX = 100;
+      if (root) {
+        const r = root.getBoundingClientRect();
+        localY = (ev.clientY - r.top) / scale;
+        localX = (ev.clientX - r.left) / scale;
+      }
+      // Drop on tools-bar band → dock and order by x.
+      if (localY <= DOCK_Y_MAX + 18) {
+        this.setState((prev) => {
+          const toolboxes = { ...prev.toolboxes };
+          const ids = (this.toolboxDefs || []).map((d) => d.id).filter((tid) => toolboxes[tid] && toolboxes[tid].visible);
+          // Assign order by current float x or drop x.
+          const scored = ids.map((tid) => {
+            const t = toolboxes[tid];
+            const ox = tid === id ? localX : (t.mode === 'float' ? t.x : (t.order || 0) * 120);
+            return { tid, ox };
+          });
+          scored.sort((a, b) => a.ox - b.ox);
+          scored.forEach((row, i) => {
+            toolboxes[row.tid] = {
+              ...toolboxes[row.tid],
+              mode: 'docked',
+              order: i,
+              visible: true,
+            };
+          });
+          return {
+            toolboxes,
+            toolsBar: { ...(prev.toolsBar || {}), visible: true, mode: 'docked' },
+            toggles: { ...prev.toggles, showToolbar: true },
+          };
+        });
+      }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  startToolsBarDrag(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const scale = this.state.scale || 1;
+    const bar = this.state.toolsBar || { x: 48, y: 48, mode: 'docked' };
+    const start = { x: e.clientX, y: e.clientY, px: bar.x || 48, py: bar.y || 48, mode: bar.mode || 'docked', moved: false };
+    const onMove = (ev) => {
+      const dx = (ev.clientX - start.x) / scale;
+      const dy = (ev.clientY - start.y) / scale;
+      if (!start.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) start.moved = true;
+      if (!start.moved) return;
+      const root = this.wrapRef.current && this.wrapRef.current.firstElementChild;
+      let localY = start.py + dy;
+      let nx = start.px + dx;
+      let ny = start.py + dy;
+      if (root) {
+        const r = root.getBoundingClientRect();
+        localY = (ev.clientY - r.top) / scale;
+        nx = (ev.clientX - r.left) / scale - 12;
+        ny = localY - 8;
+      }
+      const wantFloat = localY > 70;
+      this.setState((prev) => ({
+        toolsBar: {
+          ...(prev.toolsBar || {}),
+          visible: true,
+          mode: wantFloat ? 'float' : 'docked',
+          x: wantFloat ? Math.max(8, nx) : (prev.toolsBar && prev.toolsBar.x) || 48,
+          y: wantFloat ? Math.max(28, ny) : (prev.toolsBar && prev.toolsBar.y) || 48,
+        },
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  buildToolboxRenderModel(s) {
+    const defs = this.toolboxDefs || [];
+    const st = s.toolboxes || {};
+    const bar = s.toolsBar || { visible: true, mode: 'docked' };
+    const masterOn = !!(bar.visible && (s.toggles ? s.toggles.showToolbar !== false : true));
+    const prefShowMem = (this.form('preferences') || {}).showMemoryUsage !== false;
+    const items = defs.map((def, idx) => {
+      const layout = st[def.id] || { visible: true, mode: 'docked', order: idx, x: 80 + idx * 180, y: 70 };
+      // Preferences → Advanced “Show memory usage in toolbar” gates the Memory toolbox.
+      const prefAllows = def.id !== 'memory' || prefShowMem;
+      const tools = (def.tools || []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        kind: t.kind || 'icon',
+        iconKey: t.iconKey,
+        label: t.kind === 'label' ? this.getToolLabel(t.labelKey) : null,
+        onClick: (e) => { e.stopPropagation(); this.runToolAction(t.action); },
+      }));
+      return {
+        id: def.id,
+        label: def.label,
+        visible: !!(masterOn && layout.visible && prefAllows),
+        mode: layout.mode || 'docked',
+        order: layout.order ?? idx,
+        x: layout.x || (80 + idx * 180),
+        y: layout.y || 70,
+        tools,
+        onGripMouseDown: (e) => this.startToolboxDrag(e, def.id),
+        onClose: (e) => { e.stopPropagation(); this.closeToolbox(def.id); },
+        onToggleDock: (e) => { e.stopPropagation(); this.toggleToolboxDock(def.id); },
+      };
+    });
+    const docked = items.filter((t) => t.visible && t.mode === 'docked').sort((a, b) => a.order - b.order);
+    const floating = items.filter((t) => t.visible && t.mode === 'float');
+    const showDockedBar = masterOn && bar.mode === 'docked' && docked.length > 0;
+    const showFloatBar = masterOn && bar.mode === 'float' && docked.length > 0;
+    // When tools-bar itself floats, docked toolboxes render inside the floating host.
+    return {
+      masterOn,
+      toolsBar: {
+        visible: masterOn,
+        mode: bar.mode || 'docked',
+        x: bar.x || 48,
+        y: bar.y || 48,
+        onGripMouseDown: (e) => this.startToolsBarDrag(e),
+        onToggleDock: (e) => { e.stopPropagation(); this.toggleToolsBarDock(); },
+        onClose: (e) => {
+          e.stopPropagation();
+          this.setState((prev) => ({
+            toolsBar: { ...(prev.toolsBar || {}), visible: false },
+            toggles: { ...prev.toggles, showToolbar: false },
+          }));
+        },
+      },
+      dockedToolboxes: docked,
+      floatToolboxes: floating,
+      showDockedToolsBar: showDockedBar,
+      showFloatToolsBar: showFloatBar,
+      toolboxesMenuChecked: masterOn,
+    };
   }
   onNotesChange(e) {
     const notes = e.target.value;
@@ -292,6 +754,11 @@ export default class Cortex extends React.Component {
     if (e.ctrlKey && e.shiftKey && (e.key === '=' || e.key === '+' || e.code === 'Equal')) {
       e.preventDefault();
       this.zoomBy(1.1);
+      return;
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'd' || e.key === 'D' || e.code === 'KeyD')) {
+      e.preventDefault();
+      this.restorePanelsToDock();
       return;
     }
     if (e.ctrlKey && e.shiftKey && (e.key === '-' || e.code === 'Minus')) {
@@ -432,6 +899,36 @@ export default class Cortex extends React.Component {
     // Explicit activation from HUD chip only
     this.selectThought(id);
   }
+
+  restorePanelsToDock() {
+    this.setState((prev) => ({
+      openMenu: null,
+      openSubmenu: null,
+      notesPanel: {
+        ...prev.notesPanel,
+        visible: true,
+        mode: 'docked',
+        x: 80,
+        y: 120,
+        w: 520,
+        h: 280,
+      },
+      thoughtPanel: {
+        ...prev.thoughtPanel,
+        visible: true,
+        mode: 'docked',
+        x: 640,
+        y: 120,
+        w: 420,
+        h: 420,
+      },
+      bottomHeight: Math.max(prev.bottomHeight || 0, 246),
+      // Keep remembered Notes|Thought split; only ensure a sane ratio.
+      thoughtSplitRatio: Math.min(0.85, Math.max(0.15, prev.thoughtSplitRatio ?? 0.5)),
+    }));
+    this.showToast('Panels restored to bottom dock.');
+  }
+
   openNotesWindow() {
     this.setState(prev => ({
       openMenu: null, openSubmenu: null,
@@ -560,7 +1057,23 @@ export default class Cortex extends React.Component {
       if (plex) plex.addEventListener('wheel', this._plexWheelNative, { passive: false });
     }, 0);
     const main = dataApi.getThought('main');
-    if (main) this.setState({ notesDraft: main.notes || '' });
+    const ui = dataApi.getUiPrefs ? dataApi.getUiPrefs() : {};
+    const split = Number(ui.thoughtSplitRatio);
+    const next = {};
+    if (main) next.notesDraft = main.notes || '';
+    if (Number.isFinite(split)) next.thoughtSplitRatio = Math.min(0.85, Math.max(0.15, split));
+    // Ensure Memory toolbox exists even if toolboxes state was created before it was added.
+    this.setState((prev) => {
+      const patch = { ...next };
+      const toolboxes = { ...(prev.toolboxes || {}) };
+      if (!toolboxes.memory) {
+        toolboxes.memory = { visible: true, mode: 'docked', order: 3, x: 620, y: 70 };
+        patch.toolboxes = toolboxes;
+      }
+      return patch;
+    });
+    this.refreshMemoryStats(false);
+    this._memTimer = setInterval(() => this.refreshMemoryStats(false), 5000);
     setTimeout(() => this.measureParentLink(), 0);
   }
   componentWillUnmount() {
@@ -568,6 +1081,7 @@ export default class Cortex extends React.Component {
     window.removeEventListener('keydown', this.onGlobalKeyDown);
     const plex = this.plexRef.current;
     if (plex && this._plexWheelNative) plex.removeEventListener('wheel', this._plexWheelNative);
+    if (this._memTimer) clearInterval(this._memTimer);
   }
 
   startResizeV(e) {
@@ -583,14 +1097,37 @@ export default class Cortex extends React.Component {
   }
   startResizeH(e) {
     e.preventDefault();
-    const startX = e.clientX;
-    const startW = this.state.thoughtWidth;
+    // Parent is the docked Notes | splitter | Thought row — ratios stay 50/50-capable and fluid.
+    const dock = e.currentTarget && e.currentTarget.parentElement;
+    let lastRatio = Math.min(0.85, Math.max(0.15, Number(this.state.thoughtSplitRatio) || 0.5));
     const onMove = (ev) => {
-      const dx = (ev.clientX - startX) / (this.state.scale || 1);
-      this.setState({ thoughtWidth: Math.min(900, Math.max(220, startW - dx)) });
+      if (!dock) return;
+      const rect = dock.getBoundingClientRect();
+      if (!rect.width) return;
+      // Thought is the right pane; ratio = thought width / total (splitter is negligible).
+      const fromRight = (rect.right - ev.clientX) / rect.width;
+      lastRatio = Math.min(0.85, Math.max(0.15, fromRight));
+      this.setState({ thoughtSplitRatio: lastRatio });
     };
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // Remember for reload / future .brain load (dataApi seam).
+      try {
+        if (dataApi.setUiPrefs) dataApi.setUiPrefs({ thoughtSplitRatio: lastRatio });
+      } catch (err) { console.warn(err); }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  getThoughtTabDef(id) {
+    const list = this.thoughtTabDefs || [];
+    return list.find((t) => t.id === id) || list[0] || { id: 'thought', label: 'Thought' };
+  }
+
+  getThoughtPanelTitle() {
+    return this.getThoughtTabDef(this.state.thoughtTab).label || 'Thought';
   }
 
   thoughtsData = dataApi.getAllThoughts();
@@ -661,7 +1198,10 @@ export default class Cortex extends React.Component {
       { divider: true },
       { label: 'Expand All', shortcut: 'Ctrl+=' }, { label: 'Collapse All', shortcut: 'Ctrl+-' },
       { divider: true },
+      { label: 'Toolboxes', shortcut: 'Ctrl+Alt+F11', action: 'toggleToolboxes' },
+      { divider: true },
       { label: 'Reset View', shortcut: 'Ctrl+0' },
+      { label: 'Restore Panels to Dock', shortcut: 'Ctrl+Shift+D' },
       { label: 'Zoom In', shortcut: 'Ctrl+Shift+=' },
       { label: 'Zoom Out', shortcut: 'Ctrl+Shift+-' },
       { label: 'Manage Saved Views…' },
@@ -673,7 +1213,7 @@ export default class Cortex extends React.Component {
       { divider: true },
       { label: 'Set Theme', submenu: 'setTheme' }, { label: 'Save Theme As…' }, { label: 'Manage Saved Themes…' }, { label: 'Select Wallpaper…', shortcut: 'Ctrl+Alt+F10' },
       { divider: true },
-      { label: 'Show Toolbar', shortcut: 'Ctrl+Alt+F11', toggle: 'showToolbar' }, { label: 'Reset Tools Layout', shortcut: 'Ctrl+Alt+F12' }, { label: 'Advanced Tools Layout', shortcut: 'Ctrl+Alt+Shift+1', toggle: 'advancedToolsLayout' },
+      { label: 'Show Toolbar', shortcut: 'Ctrl+Alt+F11', action: 'toggleToolboxes' }, { label: 'Reset Tools Layout', shortcut: 'Ctrl+Alt+F12', action: 'resetToolsLayout' }, { label: 'Advanced Tools Layout', shortcut: 'Ctrl+Alt+Shift+1', toggle: 'advancedToolsLayout' },
       { divider: true },
       { label: 'Spellcheck Thoughts', shortcut: 'Ctrl+Alt+Shift+2', toggle: 'spellcheck' }, { label: 'Set Dictionary', submenu: 'setDictionary' },
       { divider: true },
@@ -947,7 +1487,10 @@ export default class Cortex extends React.Component {
     const menuItems = openDef ? openDef.items.map(it => {
       const top = cum;
       cum += it.divider ? 13 : 25;
-      const checked = it.toggle ? s.toggles[it.toggle] : false;
+      let checked = it.toggle ? s.toggles[it.toggle] : false;
+      if (it.action === 'toggleToolboxes' || it.label === 'Toolboxes' || it.label === 'Show Toolbar') {
+        checked = !!(s.toolsBar && s.toolsBar.visible && s.toggles.showToolbar !== false);
+      }
       return {
         ...it,
         rowTop: 26 + top,
@@ -959,11 +1502,28 @@ export default class Cortex extends React.Component {
           if (it.disabled) return;
           if (it.submenu) { this.setState({ openSubmenu: s.openSubmenu === it.submenu ? null : it.submenu }); return; }
           if (it.dialog) { this.openDialog(it.dialog); return; }
+          if (it.action === 'toggleToolboxes' || it.label === 'Toolboxes') {
+            this.toggleToolboxesMenu();
+            return;
+          }
+          if (it.action === 'resetToolsLayout' || it.label === 'Reset Tools Layout') {
+            this.resetToolsLayout();
+            return;
+          }
           if (it.toggle) {
             this.setState(prev => {
               const next = !prev.toggles[it.toggle];
               const toggles = { ...prev.toggles, [it.toggle]: next };
               if (next && it.clearsOnCheck) it.clearsOnCheck.forEach(k => { toggles[k] = false; });
+              // Keep Options → Show Toolbar in sync with tools-bar master visibility.
+              if (it.toggle === 'showToolbar') {
+                return {
+                  toggles,
+                  toolsBar: { ...(prev.toolsBar || {}), visible: next },
+                  openMenu: null,
+                  openSubmenu: null,
+                };
+              }
               return { toggles, openMenu: null, openSubmenu: null };
             });
             return;
@@ -976,6 +1536,7 @@ export default class Cortex extends React.Component {
             return;
           }
           if (it.label === 'Reset View') { this.resetCameraView(true); this.setState({ openMenu: null, openSubmenu: null }); return; }
+          if (it.label === 'Restore Panels to Dock') { this.restorePanelsToDock(); return; }
           if (it.label === 'Zoom In') { this.zoomBy(1.1, false); this.setState({ openMenu: null, openSubmenu: null }); return; }
           if (it.label === 'Zoom Out') { this.zoomBy(1/1.1, false); this.setState({ openMenu: null, openSubmenu: null }); return; }
           if (it.label === 'Manage Saved Views…') { this.showToast('Manage Saved Views — coming later (camera.history ready).'); this.setState({ openMenu: null, openSubmenu: null }); return; }
@@ -1005,13 +1566,34 @@ export default class Cortex extends React.Component {
 
     const toolIconStyle = 'width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);cursor:pointer;';
     const toolIconStyleSm = 'width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);cursor:pointer;';
+    const toolboxModel = this.buildToolboxRenderModel(s);
 
-    const tabDefs = [ { id: 'thought', label: 'Thought' }, { id: 'tags', label: 'Tags' }, { id: 'search', label: 'Search' }, { id: 'reports', label: 'Reports' }, { id: 'calendar', label: 'Calendar' } ];
+    const tabDefs = this.thoughtTabDefs || [];
     const thoughtTabs = tabDefs.map(t => ({
+      id: t.id,
       label: t.label,
       onClick: () => this.setState({ thoughtTab: t.id }),
       style: `padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer;color:${s.thoughtTab === t.id ? 'var(--text)' : 'var(--text-muted)'};background:${s.thoughtTab === t.id ? 'var(--border)' : 'transparent'};font-weight:${s.thoughtTab === t.id ? 600 : 400};`
     }));
+    const thoughtPanelTitle = this.getThoughtPanelTitle();
+    const splitRatio = Math.min(0.85, Math.max(0.15, Number(s.thoughtSplitRatio) || 0.5));
+    const notesDocked = !!(s.notesPanel.visible && s.notesPanel.mode === 'docked');
+    const thoughtDocked = !!(s.thoughtPanel.visible && s.thoughtPanel.mode === 'docked');
+    // Flex basis percentages so both panes (and their inputs) reflow with the splitter.
+    let dockedNotesStyle = 'display:none';
+    let dockedThoughtStyle = 'display:none';
+    let showHSplitter = false;
+    if (notesDocked && thoughtDocked) {
+      showHSplitter = true;
+      const notesPct = ((1 - splitRatio) * 100).toFixed(4);
+      const thoughtPct = (splitRatio * 100).toFixed(4);
+      dockedNotesStyle = `flex:${notesPct} 1 0%;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel-bg);overflow:hidden;`;
+      dockedThoughtStyle = `flex:${thoughtPct} 1 0%;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel-bg);overflow:hidden;`;
+    } else if (notesDocked) {
+      dockedNotesStyle = 'flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel-bg);overflow:hidden;';
+    } else if (thoughtDocked) {
+      dockedThoughtStyle = 'flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel-bg);overflow:hidden;';
+    }
 
     const btnPrimaryStyle = 'padding:6px 18px;border-radius:5px;background:var(--accent);color:var(--accent-text);font-size:12px;font-weight:600;cursor:pointer;';
     const btnSecondaryStyle = 'padding:6px 18px;border-radius:5px;background:var(--chip-bg);color:var(--text-secondary);font-size:12px;cursor:pointer;border:1px solid var(--input-border-strong);';
@@ -1047,7 +1629,10 @@ export default class Cortex extends React.Component {
     Object.keys(theme).forEach(k => { wrapperStyle['--' + k] = theme[k]; });
 
     return {
-      wrapRef: this.wrapRef, wrapperStyle, scale: s.scale, bottomHeight: ((s.notesPanel.visible && s.notesPanel.mode==='docked') || (s.thoughtPanel.visible && s.thoughtPanel.mode==='docked')) ? s.bottomHeight : 0, thoughtWidth: (s.thoughtPanel.visible && s.thoughtPanel.mode==='docked') ? s.thoughtWidth : 0,
+      wrapRef: this.wrapRef, wrapperStyle, scale: s.scale, bottomHeight: ((s.notesPanel.visible && s.notesPanel.mode==='docked') || (s.thoughtPanel.visible && s.thoughtPanel.mode==='docked')) ? s.bottomHeight : 0,
+      thoughtSplitRatio: splitRatio,
+      dockedNotesStyle, dockedThoughtStyle, showHSplitter,
+      thoughtPanelTitle,
       startResizeV: (e) => this.startResizeV(e), startResizeH: (e) => this.startResizeH(e),
       menus, openMenu: !!openDef, menuItems,
       menuPanelStyle: `position:absolute;top:26px;left:${8 + menuIndex * 62}px;min-width:260px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,0.5);padding:6px;z-index:20;`,
@@ -1057,12 +1642,32 @@ export default class Cortex extends React.Component {
       stopProp: (e) => e.stopPropagation(),
       prevent: (e) => e.preventDefault(),
       toolIconStyle, toolIconStyleSm,
+      // Office-2003-style tools-bar + toolboxes (data-driven; see toolboxDefs).
+      showDockedToolsBar: toolboxModel.showDockedToolsBar,
+      showFloatToolsBar: toolboxModel.showFloatToolsBar,
+      toolsBar: toolboxModel.toolsBar,
+      dockedToolboxes: toolboxModel.dockedToolboxes,
+      floatToolboxes: toolboxModel.floatToolboxes,
+      toolboxesMenuChecked: toolboxModel.toolboxesMenuChecked,
+      // Favorites / pinned-thoughts bar (placeholder — pins & Bezier links to plex later)
+      showFavoritesBar: !!(s.favoritesBar && s.favoritesBar.visible),
+      favorites: s.favorites || [],
+      favoritesPlaceholder: 'Favorites / pinned thoughts — drop or pin thoughts here (OS snippets, hyperlinks, properties later)',
+      onFavoritesBarContextMenu: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showToast('Favorites context menu — coming soon.');
+      },
+      onFavoritesBarClick: (e) => {
+        e.stopPropagation();
+      },
       icons: {
         back: this.icon('<polyline points="15 18 9 12 15 6"/>'), fwd: this.icon('<polyline points="9 18 15 12 9 6"/>'),
         home: this.icon('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'), pin: this.icon('<path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>'),
         plus: this.icon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'), minus: this.icon('<line x1="5" y1="12" x2="19" y2="12"/>'),
         refresh: this.icon('<polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>'),
         sync: this.icon('<path d="M12 2v4"/><path d="M12 18v4"/><circle cx="12" cy="12" r="6"/>'), unsync: this.icon('<circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/>'),
+        fullscreen: this.icon('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
         addChild: this.icon('<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>', 13),
         image: this.icon('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>', 13),
         cut: this.icon('<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>', 13),
